@@ -82,7 +82,7 @@ Oct 20, 2026 · @Efi
 
 ## החלטות אבטחה בארכיטקטורה
 
-- **הרשאות Google מינימליות:** קריאת מייל, שליחה, ואירועי יומן. בלי הרשאת מחיקה ב-Gmail. ההרשאה לאירועי יומן מאפשרת גם ביטול, ולכן כל ביטול עובר דרך שומר המדיניות ודורש אישור. (T18)
+- **הרשאות Google מינימליות:** קריאת מייל, שליחה, ואירועים ביומנים שבבעלות המשתמש בלבד (calendar.events.owned). הרשימה המלאה והסיבה לכל scope ב-ADR-010. בלי הרשאת מחיקה ב-Gmail. ההרשאה לאירועי יומן מאפשרת גם ביטול, ולכן כל ביטול עובר דרך שומר המדיניות ודורש אישור. (T18)
 - **OAuth בשתי זרימות:** ההתחברות לאפליקציה עוברת דרך ה-API, עם הרשאות זהות בלבד (openid, email) ובלי refresh token. חיבור Gmail ו-Calendar הוא זרימה נפרדת, שה-callback שלה מגיע ישר ל-Gateway. כך ה-API אף פעם לא רואה טוקן של Google. (T16)
 - **הפרדת רשת:** network policies ב-Kubernetes. ה-Agent יכול לדבר רק עם Redis ועם ספק המודל. רק ה-Gateway יוצא ל-Google. מבחוץ מקבלים תעבורה רק ה-API ונתיב ה-callback של OAuth ב-Gateway. (T21)
 - **המייל נבנה מתבנית:** ה-Gateway מרכיב את המייל שיוצא. המודל תורם רק משפט פתיחה קצר, והמועדים ושורת הגילוי מגיעים מהקוד. (T1, E5)
@@ -174,19 +174,23 @@ GitHub Actions רץ על כל pull request. שלב שנכשל עוצר את הש
 
 ## ADRs ראשונים
 
-ההחלטות שיתועדו בריפו, כל אחת במסמך קצר: מה הוחלט, למה, ומה החלופות.
+ההחלטות מתועדות בריפו ב-[docs/adr](adr/README.md), כל אחת במסמך קצר: מה הוחלט, למה, ומה החלופות.
 
 | מספר | החלטה | המלצה | חלופות |
 | --- | --- | --- | --- |
-| 001 | שפה | Python — מופיעה בכל המשרות, ויש לך בה ניסיון | — |
-| 002 | framework לסוכן | LangGraph — גרף מצבים מפורש, ועצירה לאישור אדם מובנית | Claude Agent SDK, OpenAI Agents SDK |
-| 003 | קבלת מיילים | polling כל דקה ב-MVP | push דרך Google Pub/Sub |
-| 004 | תורים | Redis Streams — משמש גם לנעילות ולהגבלת קצב | NATS, RabbitMQ |
-| 005 | בידוד משתמשים | Row-Level Security ומשתמש DB לכל שירות | סינון בקוד בלבד |
-| 006 | חלוקה לשירותים | ארבעה שירותים, בגלל הפרדת המפתחות — לא microservices לשם microservices | שירות אחד |
-| 007 | frontend | React ו-TypeScript | תבניות בצד השרת עם HTMX |
-| 008 | ניהול סודות | Sealed Secrets | SOPS |
-| 009 | ענן | AWS עם Terraform, סביבה זמנית: k3s על שרת אחד | GCP, Azure |
+| [001](adr/001-python.md) | שפה | Python — מופיעה בכל המשרות, ויש לך בה ניסיון | — |
+| [002](adr/002-langgraph.md) | framework לסוכן | LangGraph — גרף מצבים מפורש, ועצירה לאישור אדם מובנית | Claude Agent SDK, OpenAI Agents SDK |
+| [003](adr/003-gmail-polling.md) | קבלת מיילים | polling כל דקה ב-MVP | push דרך Google Pub/Sub |
+| [004](adr/004-redis-streams.md) | תורים | Redis Streams — משמש גם לנעילות ולהגבלת קצב | NATS, RabbitMQ |
+| [005](adr/005-tenant-isolation-rls.md) | בידוד משתמשים | Row-Level Security ומשתמש DB לכל שירות | סינון בקוד בלבד |
+| [006](adr/006-four-services-by-key-ownership.md) | חלוקה לשירותים | ארבעה שירותים, בגלל הפרדת המפתחות — לא microservices לשם microservices | שירות אחד |
+| [007](adr/007-react-frontend.md) | frontend | React ו-TypeScript | תבניות בצד השרת עם HTMX |
+| [008](adr/008-sealed-secrets.md) | ניהול סודות | Sealed Secrets | SOPS |
+| [009](adr/009-temporary-cloud-k3s-aws.md) | ענן | AWS עם Terraform, סביבה זמנית: k3s על שרת אחד | GCP, Azure |
+| [010](adr/010-split-oauth-flows.md) | OAuth | שתי זרימות: התחברות ב-API, ו-callback של Gmail ו-Calendar ב-Gateway. כולל רשימת ה-scopes | זרימה אחת דרך ה-API |
+| [011](adr/011-agent-has-no-db-access.md) | גישת ה-Agent לנתונים | בלי משתמש DB. ההקשר מגיע במשימה, ופנוי/תפוס דרך Redis | משתמש DB לקריאה בלבד |
+| [012](adr/012-outbound-email-from-template.md) | נוסח המייל | תבנית ב-Gateway, ומשפט פתיחה קצר מהמודל | המודל כותב הכל; תבנית בלבד |
+| [013](adr/013-stop-code-hmac.md) | קוד עצירה | HMAC עם pepper ואינדקס ייחודי | argon2 לכל משתמש; קוד עם מזהה משתמש |
 
 ## שאלות פתוחות
 

@@ -12,14 +12,15 @@ requires-python = ">=3.12"
 package = false
 
 [tool.uv.workspace]
-members = ["packages/shared"]
+members = ["packages/shared", "services/api"]
 
 [dependency-groups]
 # The workspace members are dev dependencies of the root, so a plain `uv sync`
 # installs every package for local development, tests and type checking.
-dev = ["mypy", "pip-audit", "pytest", "ruff", "shared"]
+dev = ["api", "httpx", "mypy", "pip-audit", "pytest", "ruff", "shared"]
 
 [tool.uv.sources]
+api = { workspace = true }
 shared = { workspace = true }
 
 # --- Lint and format -------------------------------------------------------
@@ -40,7 +41,7 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["shared"]
+known-first-party = ["api", "shared"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests use plain assert by design.
@@ -51,9 +52,14 @@ known-first-party = ["shared"]
 strict = true
 python_version = "3.12"
 plugins = ["pydantic.mypy"]
-files = ["packages/shared/src", "packages/shared/tests"]
+files = [
+  "packages/shared/src",
+  "packages/shared/tests",
+  "services/api/src",
+  "services/api/tests",
+]
 
 # --- Tests -----------------------------------------------------------------
 [tool.pytest.ini_options]
-testpaths = ["packages/shared/tests"]
+testpaths = ["packages/shared/tests", "services/api/tests"]
 addopts = ["--strict-markers", "--import-mode=importlib"]

@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+/*
+ * RTL rule: use logical utilities only (ms-/me-/ps-/pe-/start-/end-, text-start),
+ * never left/right, so the same markup works in both directions.
+ */

@@ -16,4 +16,5 @@ Each significant decision is recorded as a short ADR: what was decided, why, wha
 | [010](010-split-oauth-flows.md) | Two OAuth flows; Google tokens land only in `google-gateway` | Accepted |
 | [011](011-agent-has-no-db-access.md) | The agent has no database access | Accepted |
 | [012](012-outbound-email-from-template.md) | Outbound email is built from a template in `google-gateway` | Accepted |
-| [013](013-stop-code-hmac.md) | Emergency stop code stored as an HMAC with a pepper | Accepted |
+| [013](013-stop-code-hmac.md) | Emergency stop code stored as an HMAC with a pepper | Superseded by 014 |
+| [014](014-stop-code-from-backup-numbers.md) | Emergency stop only from registered backup numbers, plus a web pause | Accepted |

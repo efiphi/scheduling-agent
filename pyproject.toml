@@ -17,7 +17,7 @@ members = ["packages/shared", "services/api"]
 [dependency-groups]
 # The workspace members are dev dependencies of the root, so a plain `uv sync`
 # installs every package for local development, tests and type checking.
-dev = ["api", "httpx", "mypy", "pip-audit", "pytest", "ruff", "shared"]
+dev = ["api", "httpx2", "mypy", "pip-audit", "pytest", "ruff", "shared"]
 
 [tool.uv.sources]
 api = { workspace = true }

@@ -181,3 +181,7 @@ cython_debug/
 .cursorindexingignore
 # macOS
 .DS_Store
+
+# Node
+node_modules/
+*.tsbuildinfo

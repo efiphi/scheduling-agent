@@ -1,0 +1,59 @@
+# Root of the Python workspace (ADR-001, ADR-006).
+# Every backend service and shared package is a member with its own pyproject.toml and
+# its own dependencies, so each service image ships only what that service needs.
+# One lockfile (uv.lock) pins every version across the workspace (T20).
+
+[project]
+name = "scheduling-agent-workspace"
+version = "0.0.0"
+requires-python = ">=3.12"
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/shared"]
+
+[dependency-groups]
+# The workspace members are dev dependencies of the root, so a plain `uv sync`
+# installs every package for local development, tests and type checking.
+dev = ["mypy", "pip-audit", "pytest", "ruff", "shared"]
+
+[tool.uv.sources]
+shared = { workspace = true }
+
+# --- Lint and format -------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+  "E", "W",  # pycodestyle
+  "F",       # pyflakes: unused imports, undefined names
+  "I",       # import order
+  "B",       # bugbear: likely bugs
+  "UP",      # modern syntax for the target Python
+  "SIM",     # simplifications
+  "RUF",     # ruff-specific checks
+  "S",       # bandit: security issues (hardcoded secrets, unsafe calls)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["shared"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests use plain assert by design.
+"**/tests/**" = ["S101"]
+
+# --- Types -----------------------------------------------------------------
+[tool.mypy]
+strict = true
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+files = ["packages/shared/src", "packages/shared/tests"]
+
+# --- Tests -----------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["packages/shared/tests"]
+addopts = ["--strict-markers", "--import-mode=importlib"]

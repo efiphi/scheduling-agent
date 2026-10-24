@@ -23,8 +23,20 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/compose/.env}
       POSTGRES_DB: scheduling_agent
+      # Every TCP connection needs a password, including from inside the container
+      # (the image otherwise trusts 127.0.0.1). Only the in-container Unix socket stays
+      # passwordless, for init scripts and health checks. Found by tests/test-roles.sh.
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+      # One role per service, created by postgres/init/01-roles.sh (invariant 7).
+      OWNER_DB_PASSWORD: ${OWNER_DB_PASSWORD:?set OWNER_DB_PASSWORD in deploy/compose/.env}
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?set API_DB_PASSWORD in deploy/compose/.env}
+      GATEWAY_DB_PASSWORD: ${GATEWAY_DB_PASSWORD:?set GATEWAY_DB_PASSWORD in deploy/compose/.env}
     ports: ["127.0.0.1:5432:5432"]
-    volumes: [postgres-data:/var/lib/postgresql]
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      # Init scripts run only when the data volume is empty.
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./postgres/tests:/tests:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d scheduling_agent"]
       interval: 5s

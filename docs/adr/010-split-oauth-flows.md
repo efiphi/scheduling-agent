@@ -40,7 +40,7 @@ Not requested: `https://mail.google.com/` (full access, includes permanent delet
 
 ## Revisit when
 
-The app leaves Google's testing mode, a feature needs a scope not listed here, or Google ships a narrower Gmail scope that still allows reading thread content.
+The app leaves Google's testing mode, a feature needs a scope not listed here, or Google ships a narrower Gmail scope that still allows reading thread content. `calendar.events.owned` is the starting point; expanding to `calendar.events` is expected once a feature needs events on calendars the user does not own (e.g. shared team calendars), and will be recorded in a new ADR.
 
 ## References
 

@@ -1,0 +1,10 @@
+[project]
+name = "shared"
+version = "0.0.0"
+description = "Schemas and utilities shared by the backend services."
+requires-python = ">=3.12"
+dependencies = ["pydantic"]
+
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14"]
+build-backend = "uv_build"

@@ -1,3 +1,4 @@
+import type { Account, Contact, DailySummary, HistoryEntry, ManagedUser, Settings } from "../domain/account";
 import type { PendingAction } from "../domain/actions";
 
 /**
@@ -7,10 +8,22 @@ import type { PendingAction } from "../domain/actions";
 export interface DataSource {
   listPendingActions(): Promise<PendingAction[]>;
   getAction(id: string): Promise<PendingAction | null>;
+  listHistory(): Promise<HistoryEntry[]>;
+  listContacts(): Promise<Contact[]>;
+  getSettings(): Promise<Settings | null>;
+  getAccount(): Promise<Account | null>;
+  getSummary(): Promise<DailySummary | null>;
+  listUsers(): Promise<ManagedUser[]>;
 }
 
 /** Until the API exists, the app has no data: every screen shows its empty state. */
 export const notConnectedSource: DataSource = {
   listPendingActions: () => Promise.resolve([]),
   getAction: () => Promise.resolve(null),
+  listHistory: () => Promise.resolve([]),
+  listContacts: () => Promise.resolve([]),
+  getSettings: () => Promise.resolve(null),
+  getAccount: () => Promise.resolve(null),
+  getSummary: () => Promise.resolve(null),
+  listUsers: () => Promise.resolve([]),
 };

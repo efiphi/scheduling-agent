@@ -1,4 +1,4 @@
-import type { DataSource } from "../data/source";
+import { notConnectedSource, type DataSource } from "../data/source";
 import type { PendingAction } from "../domain/actions";
 
 // Synthetic test data only: example.com addresses and made-up names, never real people.
@@ -18,9 +18,11 @@ export function makeAction(overrides: Partial<PendingAction> = {}): PendingActio
   };
 }
 
-export function sourceWith(actions: PendingAction[]): DataSource {
+export function sourceWith(actions: PendingAction[], overrides: Partial<DataSource> = {}): DataSource {
   return {
+    ...notConnectedSource,
     listPendingActions: () => Promise.resolve(actions),
     getAction: (id) => Promise.resolve(actions.find((a) => a.id === id) ?? null),
+    ...overrides,
   };
 }

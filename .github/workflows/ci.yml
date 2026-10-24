@@ -58,6 +58,27 @@ jobs:
       # any known vulnerability in a third-party dependency still fails the job.
       - run: uv run pip-audit --skip-editable
 
+  docker:
+    name: Docker (build api image, validate Compose)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build api image
+        run: docker build -f services/api/Dockerfile -t scheduling-agent-api:ci .
+
+      - name: Image runs as a non-root user
+        run: test "$(docker image inspect scheduling-agent-api:ci --format '{{.Config.User}}')" = "10001:10001"
+
+      # Placeholder values only; real secrets live in a git-ignored .env (T17).
+      - name: Validate Compose file
+        env:
+          POSTGRES_PASSWORD: ci-placeholder
+          REDIS_PASSWORD: ci-placeholder
+        run: docker compose -f deploy/compose/compose.yaml config --quiet
+
   web:
     name: Web (lint, typecheck, test, build)
     runs-on: ubuntu-latest

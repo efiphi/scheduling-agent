@@ -53,6 +53,8 @@ export interface Account {
   backupNumbers: string[];
   verificationMethod?: "pin" | "secret_question";
   isAdmin: boolean;
+  /** The daily LLM spend cap was hit; new emails wait until tomorrow (T24). */
+  spendCapReached: boolean;
 }
 
 /** Only sender, subject and time are kept, for 7 days (UC-M8, E9). Untrusted text. */

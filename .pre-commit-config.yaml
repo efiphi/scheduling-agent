@@ -1,0 +1,21 @@
+# Runs before every commit. Install once per clone: `pre-commit install`.
+# Revisions are pinned to commit SHAs (T20); update with `pre-commit autoupdate --freeze`.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 2ca41cc1372d1e939a6a879f18cdc19fc1cac1ce  # frozen: v8.30.0
+    hooks:
+      # T17: block secrets before they reach the public repo.
+      # Uses the gitleaks binary on PATH (same version as CI), so no Go toolchain is needed.
+      - id: gitleaks-system
+        # gitleaks scans the staged diff itself; it does not take file names.
+        pass_filenames: false
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
+    hooks:
+      - id: detect-private-key
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace

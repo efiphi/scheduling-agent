@@ -1,5 +1,6 @@
 import type { Account, Contact, DailySummary, HistoryEntry, ManagedUser, Settings } from "../domain/account";
 import type { PendingAction } from "../domain/actions";
+import type { QueueEvent } from "../domain/queue";
 
 /**
  * Everything the UI reads goes through this interface. Screens never fetch directly,
@@ -14,6 +15,8 @@ export interface DataSource {
   getAccount(): Promise<Account | null>;
   getSummary(): Promise<DailySummary | null>;
   listUsers(): Promise<ManagedUser[]>;
+  /** Real-time queue changes (Server-Sent Events in Layer 1). Returns an unsubscribe function. */
+  subscribeToQueue(onEvent: (event: QueueEvent) => void): () => void;
 }
 
 /** Until the API exists, the app has no data: every screen shows its empty state. */
@@ -26,4 +29,5 @@ export const notConnectedSource: DataSource = {
   getAccount: () => Promise.resolve(null),
   getSummary: () => Promise.resolve(null),
   listUsers: () => Promise.resolve([]),
+  subscribeToQueue: () => () => {},
 };

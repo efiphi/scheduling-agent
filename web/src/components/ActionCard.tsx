@@ -2,23 +2,45 @@ import { Link } from "react-router";
 
 import { actionKindLabel, type PendingAction } from "../domain/actions";
 import { formatDateTime } from "../lib/time";
+import { PendingButton } from "./ui";
 import { SlotTime } from "./SlotTime";
 
 // The card must allow a decision without opening another screen (docs/04-web-app.md).
 // Everything that came from outside is rendered as text; English inside Hebrew is
 // wrapped in <bdi> so addresses and times keep their direction.
 export function ActionCard({ action }: { action: PendingAction }) {
+  const expired = action.status === "expired";
+  const failed = action.status === "failed";
+  const border = failed ? "border-red-400" : action.anomalyReason ? "border-amber-400" : "border-slate-200";
+
   return (
     <article
       aria-labelledby={`action-${action.id}-title`}
-      className={`rounded-xl border bg-white p-4 shadow-sm ${action.anomalyReason ? "border-amber-400" : "border-slate-200"}`}
+      className={`rounded-xl border bg-white p-4 shadow-sm ${border} ${expired ? "opacity-75" : ""}`}
     >
       <header className="mb-3 flex items-baseline justify-between gap-2">
         <h2 id={`action-${action.id}-title`} className="text-lg font-semibold">
           <Link to={`/actions/${action.id}`}>{actionKindLabel[action.kind]}</Link>
         </h2>
-        <p className="text-sm text-slate-600">בתוקף עד {formatDateTime(action.expiresAt)}</p>
+        <p className="text-sm text-slate-600">
+          {expired ? "פג" : `בתוקף עד ${formatDateTime(action.expiresAt)}`}
+        </p>
       </header>
+
+      {failed && (
+        // E13: no failure disappears silently; the reason is in plain language.
+        <p role="alert" className="mb-3 rounded-lg bg-red-50 p-2 text-sm text-red-900">
+          <span className="font-semibold">נכשל: </span>
+          {action.failureReason ?? "הביצוע נכשל."}
+        </p>
+      )}
+
+      {expired && (
+        // E7: an expired action is locked; it can only go back to the queue as a new pending action.
+        <p role="status" className="mb-3 rounded-lg bg-slate-100 p-2 text-sm text-slate-800">
+          הפעולה פגה. אפשר להחזיר אותה לתור.
+        </p>
+      )}
 
       {action.anomalyReason && (
         <p role="note" className="mb-3 rounded-lg bg-amber-50 p-2 text-sm text-amber-900">
@@ -77,7 +99,7 @@ export function ActionCard({ action }: { action: PendingAction }) {
         </section>
       )}
 
-      <ActionButtons />
+      {expired ? <PendingButton>החזר לתור</PendingButton> : <ActionButtons />}
     </article>
   );
 }

@@ -1,6 +1,6 @@
 # ADR-013: Emergency stop code stored as an HMAC with a pepper
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-014](014-stop-code-from-backup-numbers.md)
 - **Date:** 2026-10-23
 
 ## Context

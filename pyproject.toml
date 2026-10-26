@@ -12,15 +12,16 @@ requires-python = ">=3.12"
 package = false
 
 [tool.uv.workspace]
-members = ["packages/shared", "services/api"]
+members = ["packages/db", "packages/shared", "services/api"]
 
 [dependency-groups]
 # The workspace members are dev dependencies of the root, so a plain `uv sync`
 # installs every package for local development, tests and type checking.
-dev = ["api", "httpx2", "mypy", "pip-audit", "pytest", "ruff", "shared"]
+dev = ["api", "db", "httpx2", "mypy", "pip-audit", "pytest", "ruff", "shared"]
 
 [tool.uv.sources]
 api = { workspace = true }
+db = { workspace = true }
 shared = { workspace = true }
 
 # --- Lint and format -------------------------------------------------------
@@ -41,7 +42,7 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["api", "shared"]
+known-first-party = ["api", "db", "shared"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests use plain assert by design.
@@ -57,9 +58,12 @@ files = [
   "packages/shared/tests",
   "services/api/src",
   "services/api/tests",
+  "packages/db/src",
+  "packages/db/tests",
 ]
 
 # --- Tests -----------------------------------------------------------------
 [tool.pytest.ini_options]
-testpaths = ["packages/shared/tests", "services/api/tests"]
+testpaths = ["packages/shared/tests", "services/api/tests", "packages/db/tests"]
 addopts = ["--strict-markers", "--import-mode=importlib"]
+markers = ["db: needs a running Postgres with the roles and migrations applied"]

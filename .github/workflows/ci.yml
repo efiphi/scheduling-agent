@@ -53,7 +53,8 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
-      - run: uv run pytest
+      # Tests that need a real Postgres run in the database job.
+      - run: uv run pytest -m "not db"
       # Our own workspace packages are editable and not on PyPI, so they are skipped;
       # any known vulnerability in a third-party dependency still fails the job.
       - run: uv run pip-audit --skip-editable
@@ -83,7 +84,7 @@ jobs:
         run: docker compose -f deploy/compose/compose.yaml config --quiet
 
   database:
-    name: Database roles (T13, T16)
+    name: Database roles, migrations and permissions (T3, T10, T13, T16)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -104,6 +105,23 @@ jobs:
 
       - name: Attack the roles
         run: docker compose -f deploy/compose/compose.yaml exec -T postgres sh /tests/test-roles.sh
+
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+
+      - run: uv sync --locked
+
+      - name: Run migrations as scheduling_owner
+        working-directory: packages/db
+        run: |
+          export MIGRATION_DATABASE_URL="postgresql+psycopg://scheduling_owner:${OWNER_DB_PASSWORD}@127.0.0.1:5432/scheduling_agent"
+          uv run alembic upgrade head
+          # Fails if the models and the migrations disagree.
+          uv run alembic check
+
+      - name: Attack the tables (T3, T10, T13, T16)
+        env:
+          REQUIRE_DB: "1"
+        run: uv run pytest -m db -v
 
       - name: Stop Postgres
         if: always()

@@ -18,6 +18,9 @@ WORKDIR /app
 # Third-party dependencies first, from the lockfile only: this layer is reused
 # as long as the dependencies do not change.
 COPY pyproject.toml uv.lock ./
+# Every workspace member's pyproject.toml is needed for uv to read the workspace, even the
+# ones the api image does not install (e.g. packages/db). Only api and shared get installed.
+COPY packages/db/pyproject.toml packages/db/
 COPY packages/shared/pyproject.toml packages/shared/
 COPY services/api/pyproject.toml services/api/
 RUN --mount=type=cache,target=/root/.cache/uv \

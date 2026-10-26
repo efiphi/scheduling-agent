@@ -1,0 +1,17 @@
+[project]
+name = "google-gateway"
+version = "0.0.0"
+description = "The only holder of Google tokens: OAuth connect, email polling, free/busy, policy guard, execution."
+requires-python = ">=3.12"
+# Google client libraries live here and nowhere else (invariant 1, ADR-006).
+dependencies = ["cryptography", "shared"]
+
+[tool.uv.sources]
+shared = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "google_gateway"

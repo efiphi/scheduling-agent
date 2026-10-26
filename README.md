@@ -6,7 +6,7 @@ An AI agent that reads your Gmail, spots meeting requests, proposes free slots f
 
 Scheduling agents are common. This one is built around a **threat model**: the agent reads email from anyone, so every design decision assumes an attacker is writing some of that email, and every defense is tested.
 
-> **Status:** Layer 0 (skeleton) is complete — repository, CI, web UI structure, the first backend service, a hardened container, and database roles. Layer 1 (the end-to-end MVP) is next. See [build layers](#build-layers).
+> **Status:** Layer 0 (skeleton) is complete — repository, CI, web UI structure, the first backend service, a hardened container, and database roles. Layer 1 (the end-to-end MVP) is in progress. See [build layers](#build-layers).
 
 ## How it stays safe
 
@@ -120,7 +120,7 @@ Each layer ends with something that works on its own.
 | Layer | What | Status |
 |---|---|---|
 | 0 — Skeleton | Repo, CI with secret scanning, UI structure, api service, hardened container, database roles | ✅ Done |
-| 1 — MVP core | Email → detection → slots → draft → approval → send + Meet event, on a demo account; WhatsApp | Next |
+| 1 — MVP core | Email → detection → slots → draft → approval → send + Meet event, on a demo account; WhatsApp | In progress |
 | 2 — Kubernetes and GitOps | k3d, Helm, Argo CD, network policies | Planned |
 | 3 — Observability | OpenTelemetry, Prometheus, Grafana, agent tracing | Planned |
 | 4 — Evals and red team | Hebrew/English eval set and the attack corpus, both in CI | Planned |
@@ -134,6 +134,7 @@ Every significant decision has a one-page record — context, decision, alternat
 - [ADR-006](docs/adr/006-four-services-by-key-ownership.md) — four services, split by who holds which key
 - [ADR-010](docs/adr/010-split-oauth-flows.md) — two OAuth flows; every Google scope and why
 - [ADR-014](docs/adr/014-stop-code-from-backup-numbers.md) — emergency stop only from registered backup numbers
+- [ADR-015](docs/adr/015-llm-provider-and-model.md) — which model, why, and how API data is handled
 
 ## Data
 

@@ -18,3 +18,4 @@ Each significant decision is recorded as a short ADR: what was decided, why, wha
 | [012](012-outbound-email-from-template.md) | Outbound email is built from a template in `google-gateway` | Accepted |
 | [013](013-stop-code-hmac.md) | Emergency stop code stored as an HMAC with a pepper | Superseded by 014 |
 | [014](014-stop-code-from-backup-numbers.md) | Emergency stop only from registered backup numbers, plus a web pause | Accepted |
+| [015](015-llm-provider-and-model.md) | Claude Haiku 5.5 for the agent, verified on synthetic emails first | Accepted |

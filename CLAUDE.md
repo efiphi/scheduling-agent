@@ -64,8 +64,8 @@ docs/adr/               # architecture decision records
 
 Work strictly in the layers defined in `docs/03-architecture.md`. Do not jump ahead.
 
-- **Layer 0 — skeleton:** repo structure, Docker Compose (Postgres, Redis), empty FastAPI service, `.gitignore`, pre-commit (ruff, gitleaks), basic GitHub Actions CI. *(current)*
-- **Layer 1 — MVP core:** end-to-end thin path on a demo Gmail account: email → detection → slots → draft → approval → send + Meet event.
+- **Layer 0 — skeleton:** repo structure, Docker Compose (Postgres, Redis), empty FastAPI service, `.gitignore`, pre-commit (ruff, gitleaks), basic GitHub Actions CI. *(done, 25.10)*
+- **Layer 1 — MVP core:** end-to-end thin path on a demo Gmail account: email → detection → slots → draft → approval → send + Meet event. *(current)* Order: 1a email → web-app approval → reply in thread; 1b WhatsApp; 1c counterpart picks a slot → event with Meet.
 - **Layers 2–6:** Kubernetes + GitOps, observability, evals + red team in CI, detection layer, temporary cloud.
 
 ## Conventions
@@ -91,4 +91,6 @@ Python; LangGraph (ADR-002 alternatives: Claude Agent SDK, OpenAI Agents SDK); p
 
 Also decided (23.10, round two): two OAuth flows with the Gmail/Calendar callback on `google-gateway`; `agent` has no DB role; outbound email built from a template in `google-gateway`; stop code stored as HMAC with a pepper (superseded 25.10 by ADR-014: stop only from backup numbers + code, argon2id, plus a web pause button); `google-gateway` creates pending actions and `api` alone holds the Meta token; user deletion leaves only anonymized audit rows; skipped emails keep sender, subject and time only, for 7 days; `request_patterns` deferred (fixed anomaly rules in the MVP).
 
-Still open: whether to add a separate "reader" LLM in addition to key separation (to discuss with the security mentor); which LLM provider/model per task (decide at the start of Layer 1).
+Also decided (26.10, start of Layer 1): LLM = Claude Haiku 5.5 with structured outputs, verified on 10–15 synthetic Hebrew/English emails first, Sonnet 5.5 as the fallback (ADR-015); database access with SQLAlchemy + Alembic, RLS policies and GRANTs as explicit SQL in migrations; WhatsApp after the email → web-approval path.
+
+Still open: whether to add a separate "reader" LLM in addition to key separation (to discuss with the security mentor).

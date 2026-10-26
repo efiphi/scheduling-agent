@@ -12,16 +12,17 @@ requires-python = ">=3.12"
 package = false
 
 [tool.uv.workspace]
-members = ["packages/db", "packages/shared", "services/api"]
+members = ["packages/db", "packages/shared", "services/api", "services/google_gateway"]
 
 [dependency-groups]
 # The workspace members are dev dependencies of the root, so a plain `uv sync`
 # installs every package for local development, tests and type checking.
-dev = ["api", "db", "httpx2", "mypy", "pip-audit", "pytest", "ruff", "shared"]
+dev = ["api", "db", "google-gateway", "httpx2", "mypy", "pip-audit", "pytest", "ruff", "shared"]
 
 [tool.uv.sources]
 api = { workspace = true }
 db = { workspace = true }
+google-gateway = { workspace = true }
 shared = { workspace = true }
 
 # --- Lint and format -------------------------------------------------------
@@ -42,7 +43,7 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["api", "db", "shared"]
+known-first-party = ["api", "db", "google_gateway", "shared"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests use plain assert by design.
@@ -60,10 +61,17 @@ files = [
   "services/api/tests",
   "packages/db/src",
   "packages/db/tests",
+  "services/google_gateway/src",
+  "services/google_gateway/tests",
 ]
 
 # --- Tests -----------------------------------------------------------------
 [tool.pytest.ini_options]
-testpaths = ["packages/shared/tests", "services/api/tests", "packages/db/tests"]
+testpaths = [
+  "packages/shared/tests",
+  "services/api/tests",
+  "packages/db/tests",
+  "services/google_gateway/tests",
+]
 addopts = ["--strict-markers", "--import-mode=importlib"]
 markers = ["db: needs a running Postgres with the roles and migrations applied"]

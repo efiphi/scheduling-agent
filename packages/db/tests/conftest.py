@@ -1,53 +1,14 @@
-"""Fixtures for tests that run against a real Postgres with the roles and migrations applied.
+"""Seed data for the database tests. The engine fixtures (owner, api, gateway) come from
+db.testing, loaded by the root conftest.py."""
 
-Connection details come from the environment (the same variables as deploy/compose/.env).
-Without them these tests are skipped locally; CI sets REQUIRE_DB=1 so a missing database
-fails the run instead of silently skipping it.
-"""
-
-import os
 from collections.abc import Iterator
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine, text
 
 from db.session import set_user_context as as_user
-
-HOST = os.environ.get("DB_HOST", "127.0.0.1")
-PORT = os.environ.get("DB_PORT", "5432")
-NAME = "scheduling_agent"
-
-_PASSWORDS = {
-    "scheduling_owner": "OWNER_DB_PASSWORD",
-    "api_service": "API_DB_PASSWORD",
-    "gateway_service": "GATEWAY_DB_PASSWORD",
-}
-
-
-def _engine(role: str) -> Engine:
-    password = os.environ.get(_PASSWORDS[role])
-    if not password:
-        if os.environ.get("REQUIRE_DB") == "1":
-            pytest.fail(f"{_PASSWORDS[role]} is not set but REQUIRE_DB=1")
-        pytest.skip("database tests need the role passwords in the environment")
-    return create_engine(f"postgresql+psycopg://{role}:{password}@{HOST}:{PORT}/{NAME}")
-
-
-@pytest.fixture(scope="session")
-def owner() -> Engine:
-    return _engine("scheduling_owner")
-
-
-@pytest.fixture(scope="session")
-def api() -> Engine:
-    return _engine("api_service")
-
-
-@pytest.fixture(scope="session")
-def gateway() -> Engine:
-    return _engine("gateway_service")
 
 
 @dataclass(frozen=True)

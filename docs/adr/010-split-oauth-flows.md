@@ -12,7 +12,7 @@ Google is used for two unrelated things: signing in to the web app, and giving t
 Two separate OAuth flows:
 
 1. **Login** — handled by `api` with OpenID Connect and identity scopes only. No refresh token is requested or stored; `api` keeps only its own session cookie.
-2. **Connect Gmail and Calendar** — the web app calls `POST /integrations/google/connect`; `api` returns a redirect URL that `google-gateway` built (with a signed `state` bound to the logged-in user). Google redirects back to a callback on `google-gateway`, which exchanges the code, encrypts the refresh token with its own key and stores it. `api` never sees the code or the token.
+2. **Connect Gmail and Calendar** — the web app calls `POST /integrations/google/connect`; `api` returns a redirect URL that `google-gateway` built (with a random, single-use `state` kept in Redis for 10 minutes and bound to the logged-in user, plus PKCE). Google redirects back to a callback on `google-gateway`, which exchanges the code, checks that the granted scopes are exactly the ones below and that the Google account is the user's own, encrypts the refresh token with its own key (ADR-016) and stores it. `api` never sees the code or the token.
 
 ### Scopes
 

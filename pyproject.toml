@@ -65,6 +65,11 @@ files = [
   "services/google_gateway/tests",
 ]
 
+# Google's OAuth helper and API client ship without type information.
+[[tool.mypy.overrides]]
+module = ["google_auth_oauthlib.*", "googleapiclient.*"]
+ignore_missing_imports = true
+
 # --- Tests -----------------------------------------------------------------
 [tool.pytest.ini_options]
 testpaths = [
@@ -74,4 +79,6 @@ testpaths = [
   "services/google_gateway/tests",
 ]
 addopts = ["--strict-markers", "--import-mode=importlib"]
+# Shared fakes for the gateway tests (gateway_fakes.py), importable by name.
+pythonpath = ["services/google_gateway/tests"]
 markers = ["db: needs a running Postgres with the roles and migrations applied"]

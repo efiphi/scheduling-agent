@@ -1,9 +1,10 @@
 """Reading Gmail for one user (ADR-003). Read-only: this module never sends or modifies.
 
 Two reads per message, on purpose:
-1. `message_metadata` - headers, labels and Gmail's short snippet. Enough for the rule
-   filter (mail_filter.py), so the body of an email that is skipped never leaves Google.
-2. `message_body` - the full text, only for emails that passed the filter.
+1. `message_metadata` - headers and labels. Enough for most of the rule filter
+   (mail_filter.py): newsletters, auto-replies and the user's own mail are decided here,
+   and their bodies are never fetched.
+2. `message_body` - the full text, only when the filter has to look for a request in it.
 """
 
 import base64

@@ -6,6 +6,7 @@ and everything stays untrusted data either way (invariant 2). Prefer the sender'
 text/plain part; otherwise strip tags from text/html with the standard library's parser.
 """
 
+import re
 from collections.abc import Callable
 from html.parser import HTMLParser
 from typing import Any
@@ -71,3 +72,32 @@ def html_to_text(html: str) -> str:
     collector.close()
     lines = (" ".join(line.split()) for line in "".join(collector.chunks).splitlines())
     return "\n".join(line for line in lines if line)
+
+
+# Where a reply's quoted history begins. Gmail, Outlook and Apple Mail, English and Hebrew.
+# Bidi marks (U+200E/U+200F) are stripped first: Gmail wraps Hebrew reply headers in them.
+_QUOTE_START = re.compile(
+    r"^(On .{5,200} wrote:"
+    r"|בתאריך .{5,200}(כתב|כתבה|מאת .{3,200}):"
+    r"|-{2,}\s*(Original Message|Forwarded message|הודעה מקורית|הודעה שהועברה)\s*-{2,}"
+    r"|(From|מאת): .+)$",
+    re.I,
+)
+_BIDI_MARKS = str.maketrans("", "", "\u200e\u200f\u202a\u202b\u202c\u202d\u202e")
+
+
+def strip_quoted(text: str) -> str:
+    """The new part of a reply: everything before the quoted history, minus "> " lines."""
+    kept: list[str] = []
+    lines = text.splitlines()
+    for i, raw in enumerate(lines):
+        line = raw.translate(_BIDI_MARKS).strip()
+        # Gmail sometimes breaks "On <date> <name> wrote:" over two lines.
+        joined = (
+            f"{line} {lines[i + 1].translate(_BIDI_MARKS).strip()}" if i + 1 < len(lines) else line
+        )
+        if _QUOTE_START.match(line) or (line.startswith("On ") and _QUOTE_START.match(joined)):
+            break
+        if not line.startswith(">"):
+            kept.append(raw)
+    return "\n".join(kept).strip()

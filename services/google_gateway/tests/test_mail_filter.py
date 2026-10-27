@@ -4,15 +4,31 @@ import pytest
 from mail_fakes import USER_EMAIL, meta
 
 from google_gateway.gmail import MessageMeta
-from google_gateway.mail_filter import Reason, classify
+from google_gateway.mail_filter import Decision, Reason, classify
 
 
-def decide(message: MessageMeta, tracked: bool = False) -> Reason:
-    return classify(message, user_email=USER_EMAIL, tracked_thread=tracked).reason
+class BodyReader:
+    def __init__(self, body: str) -> None:
+        self.body = body
+        self.calls = 0
+
+    def __call__(self) -> str:
+        self.calls += 1
+        return self.body
+
+
+def decide(message: MessageMeta, body: str = "", tracked: bool = False) -> Decision:
+    return classify(
+        message, user_email=USER_EMAIL, tracked_thread=tracked, read_body=BodyReader(body)
+    )
+
+
+def reason(message: MessageMeta, body: str = "", tracked: bool = False) -> Reason:
+    return decide(message, body, tracked).reason
 
 
 @pytest.mark.parametrize(
-    ("subject", "snippet"),
+    ("subject", "body"),
     [
         ("Can we schedule a call?", ""),
         ("Quick question", "Are you available on Tuesday for a short meeting?"),
@@ -24,22 +40,67 @@ def decide(message: MessageMeta, tracked: bool = False) -> Reason:
         ("עדכון", "מה הזמינות שלך?"),
     ],
 )
-def test_scheduling_words_pass(subject: str, snippet: str) -> None:
-    assert decide(meta(subject=subject, snippet=snippet)) is Reason.KEYWORD
+def test_scheduling_words_pass(subject: str, body: str) -> None:
+    assert reason(meta(subject=subject), body) is Reason.KEYWORD
 
 
 @pytest.mark.parametrize(
-    ("subject", "snippet"),
+    "body",
+    [
+        "Thanks for the draft. When works for you to go over it?",
+        "Do you have half an hour this week?",
+        "Could we hop on for 15 minutes tomorrow?",
+        "Let me know a good time to talk.",
+        "תודה על הטיוטה. מתי נוח לך לעבור עליה?",
+        "יש לך חצי שעה השבוע?",
+        "אפשר לדבר על זה מחר?",
+        "בוא נשב על זה ביום ראשון",
+    ],
+)
+def test_requests_phrased_without_keywords_pass(body: str) -> None:
+    assert reason(meta(subject="Re: Q3 budget"), body) is Reason.KEYWORD
+
+
+def test_a_request_deep_inside_a_long_email_passes() -> None:
+    # The request is in the third paragraph, far past Gmail's ~200-character snippet.
+    body = (
+        "היי,\n\n"
+        + "עברתי על הדוח הרבעוני ששלחת. יש כמה נקודות בטבלת ההוצאות שלא ברורות לי. " * 4
+        + "\n\nבנוסף, הנתונים של החודש האחרון נראים גבוהים מהרגיל, וכדאי לבדוק אותם.\n\n"
+        + "אולי עדיף שנדבר על זה. מתי נוח לך השבוע?\n\nתודה"
+    )
+    assert body.index("מתי נוח") > 300
+    assert reason(meta(subject="Re: דוח רבעוני"), body) is Reason.KEYWORD
+
+
+def test_a_request_only_in_the_quoted_history_does_not_count() -> None:
+    body = (
+        "Thanks, the invoice is attached.\n\n"
+        "On Tue, Oct 27, 2026 at 10:24 PM Dana Example <dana@example.org> wrote:\n"
+        "> Can we schedule a meeting next week?\n"
+    )
+    assert reason(meta(subject="Re: invoice"), body) is Reason.NO_MATCH
+
+
+def test_hebrew_gmail_reply_header_ends_the_new_part() -> None:
+    body = (
+        "מצורפת החשבונית.\n\n"
+        "\u200fבתאריך יום ג׳, 27 באוק׳ 2026 ב-22:24 מאת Dana <dana@example.org>\u200f:\n"
+        "> אפשר לקבוע פגישה?\n"
+    )
+    assert reason(meta(subject="Re: חשבונית"), body) is Reason.NO_MATCH
+
+
+@pytest.mark.parametrize(
+    ("subject", "body"),
     [
         ("Invoice #1234", "Please find attached"),
         ("חשבונית לתשלום", "מצורפת החשבונית"),
         ("Recall of product", "a recall notice"),  # "call" inside a word is not a match
     ],
 )
-def test_unrelated_email_is_skipped_and_recorded(subject: str, snippet: str) -> None:
-    decision = classify(
-        meta(subject=subject, snippet=snippet), user_email=USER_EMAIL, tracked_thread=False
-    )
+def test_unrelated_email_is_skipped_and_recorded(subject: str, body: str) -> None:
+    decision = decide(meta(subject=subject), body)
     assert decision.reason is Reason.NO_MATCH
     assert not decision.passes
     assert decision.recorded_as_skipped
@@ -47,12 +108,12 @@ def test_unrelated_email_is_skipped_and_recorded(subject: str, snippet: str) -> 
 
 @pytest.mark.parametrize("subject", ["Invitation: Sync @ Tue 10:00", "הזמנה: פגישת צוות"])
 def test_calendar_invitation_passes(subject: str) -> None:
-    assert decide(meta(subject=subject)) is Reason.INVITATION
+    assert reason(meta(subject=subject)) is Reason.INVITATION
 
 
 def test_reply_in_a_tracked_thread_passes_without_keywords() -> None:
     # UC-M2: the other side picks a slot. "Tuesday works" has no scheduling words.
-    assert decide(meta(subject="Re: hello", snippet="Tuesday works"), tracked=True) is (
+    assert reason(meta(subject="Re: hello"), "Tuesday works", tracked=True) is (
         Reason.TRACKED_THREAD
     )
 
@@ -67,19 +128,16 @@ def test_reply_in_a_tracked_thread_passes_without_keywords() -> None:
 )
 def test_t25_auto_replies_are_skipped_even_in_a_tracked_thread(headers: dict[str, str]) -> None:
     # Answering an out-of-office reply that answers back is how agent loops start.
-    assert decide(meta(subject="Out of office: meeting", extra=headers), tracked=True) is (
-        Reason.AUTO_REPLY
-    )
+    message = meta(subject="Out of office: meeting", extra=headers)
+    assert reason(message, tracked=True) is Reason.AUTO_REPLY
 
 
 def test_auto_submitted_no_is_a_person() -> None:
-    assert decide(meta(Auto_Submitted="no")) is Reason.KEYWORD
+    assert reason(meta(Auto_Submitted="no")) is Reason.KEYWORD
 
 
 def test_t25_the_users_own_message_is_never_processed() -> None:
-    decision = classify(
-        meta(sender=f"Me <{USER_EMAIL.upper()}>"), user_email=USER_EMAIL, tracked_thread=True
-    )
+    decision = decide(meta(sender=f"Me <{USER_EMAIL.upper()}>"), tracked=True)
     assert decision.reason is Reason.OWN_MESSAGE
     assert not decision.recorded_as_skipped
 
@@ -94,20 +152,40 @@ def test_t25_the_users_own_message_is_never_processed() -> None:
     ],
 )
 def test_newsletters_with_scheduling_words_are_skipped(message: MessageMeta) -> None:
-    assert decide(message) is Reason.BULK
+    assert reason(message) is Reason.BULK
 
 
 @pytest.mark.parametrize(
     "sender", ["no-reply@example.org", "noreply@example.org", "alerts.donotreply@example.org"]
 )
 def test_no_reply_senders_are_skipped(sender: str) -> None:
-    assert decide(meta(sender=sender, subject="Your meeting is confirmed")) is (
+    assert reason(meta(sender=sender, subject="Your meeting is confirmed")) is (
         Reason.NO_REPLY_SENDER
     )
 
 
 @pytest.mark.parametrize("labels", [("SPAM",), ("INBOX", "SPAM"), ("DRAFT",), ("SENT",)])
 def test_mail_outside_the_inbox_is_ignored_entirely(labels: tuple[str, ...]) -> None:
-    decision = classify(meta(labels=labels), user_email=USER_EMAIL, tracked_thread=False)
+    decision = decide(meta(labels=labels))
     assert decision.reason is Reason.NOT_INBOX
     assert not decision.recorded_as_skipped
+
+
+@pytest.mark.parametrize(
+    ("message", "tracked"),
+    [
+        (meta(labels=("SPAM",)), False),
+        (meta(sender=USER_EMAIL), False),
+        (meta(Auto_Submitted="auto-replied"), False),
+        (meta(List_Id="<news.example.org>"), False),
+        (meta(sender="noreply@example.org"), False),
+        (meta(subject="Invitation: Sync"), False),
+        (meta(subject="Re: hello"), True),
+    ],
+)
+def test_bodies_are_opened_only_when_headers_cannot_decide(
+    message: MessageMeta, tracked: bool
+) -> None:
+    body = BodyReader("Can we meet?")
+    classify(message, user_email=USER_EMAIL, tracked_thread=tracked, read_body=body)
+    assert body.calls == 0

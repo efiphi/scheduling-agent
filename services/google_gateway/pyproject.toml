@@ -4,9 +4,20 @@ version = "0.0.0"
 description = "The only holder of Google tokens: OAuth connect, email polling, free/busy, policy guard, execution."
 requires-python = ">=3.12"
 # Google client libraries live here and nowhere else (invariant 1, ADR-006).
-dependencies = ["cryptography", "shared"]
+dependencies = [
+  "cryptography",
+  "db",
+  "fastapi",
+  "google-api-python-client",
+  "google-auth",
+  "google-auth-oauthlib",
+  "redis",
+  "shared",
+  "uvicorn",
+]
 
 [tool.uv.sources]
+db = { workspace = true }
 shared = { workspace = true }
 
 [build-system]

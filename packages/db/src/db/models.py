@@ -123,6 +123,8 @@ class GoogleCredentials(Base):
     scopes: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="connected")
     updated_at: Mapped[datetime] = _created_at()
+    # Where Gmail polling left off (ADR-003). NULL until the first poll.
+    gmail_history_id: Mapped[str | None] = mapped_column(Text)
 
 
 class Thread(Base):

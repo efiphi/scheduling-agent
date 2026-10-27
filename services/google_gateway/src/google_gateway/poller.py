@@ -2,10 +2,12 @@
 
 For one user, under a per-user lock:
 1. Read what was added to the inbox since the stored history id.
-2. For each new message: headers only -> rule filter (mail_filter.py).
-   - passed, and under the rate limit: fetch the body, record the thread, queue an
-     EmailTask for the agent. The email is untrusted data (invariant 2).
-   - skipped: keep sender, subject and time for the daily summary (E9).
+2. For each new message: the rule filter (mail_filter.py), which opens the body only
+   when headers alone cannot decide. The body is fetched at most once per message.
+   - passed, and under the rate limit: record the thread, queue an EmailTask for the
+     agent. The email is untrusted data (invariant 2).
+   - skipped: keep sender, subject and time for the daily summary (E9); the body, if it
+     was read, is dropped.
 3. Store the new history id, only after every message was handled. A crash before that
    repeats the batch next time, and the "handled" markers make the repeat harmless (E8).
 
@@ -110,8 +112,9 @@ class MailboxPoller:
             return "duplicate"
         meta = gmail.message_metadata(ref.message_id)
         tracked = self.store.is_tracked_thread(user_id, meta.thread_id)
-        decision = classify(meta, user_email=user_email, tracked_thread=tracked)
-        outcome = self._act(user_id, user_email, meta, decision, gmail)
+        body = _Body(gmail, ref.message_id)
+        decision = classify(meta, user_email=user_email, tracked_thread=tracked, read_body=body)
+        outcome = self._act(user_id, user_email, meta, decision, body)
         self.coordination.mark_handled(user_id, ref.message_id)
         return outcome
 
@@ -121,7 +124,7 @@ class MailboxPoller:
         user_email: str,
         meta: MessageMeta,
         decision: Decision,
-        gmail: GmailReader,
+        body: "_Body",
     ) -> str:
         sender = sender_address(meta)
         if decision.passes and not self.coordination.take_rate_slot(user_id, sender):
@@ -138,7 +141,8 @@ class MailboxPoller:
                 gmail_message_id=meta.message_id,
                 sender=sender,
                 subject=UntrustedText(meta.header("Subject")[:MAX_SUBJECT_CHARS]),
-                body_text=UntrustedText(gmail.message_body(meta.message_id)[:MAX_BODY_CHARS]),
+                # The whole body, quotes included: they are the thread's context so far.
+                body_text=UntrustedText(body()[:MAX_BODY_CHARS]),
                 received_at=meta.received_at,
             )
         except ValidationError:
@@ -162,6 +166,20 @@ class MailboxPoller:
     def _record_skipped(self, user_id: UUID, meta: MessageMeta) -> None:
         sender = sender_address(meta) or meta.header("From")
         self.store.record_skipped(user_id, sender, meta.header("Subject"), meta.received_at)
+
+
+class _Body:
+    """Fetches a message body on first use and remembers it."""
+
+    def __init__(self, gmail: GmailReader, message_id: str) -> None:
+        self._gmail = gmail
+        self._message_id = message_id
+        self._text: str | None = None
+
+    def __call__(self) -> str:
+        if self._text is None:
+            self._text = self._gmail.message_body(self._message_id)
+        return self._text
 
 
 def _unique(refs: list[MessageRef]) -> list[MessageRef]:

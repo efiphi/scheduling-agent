@@ -1,24 +1,32 @@
 """The rule-based email filter (UC-M8, E9): which emails reach the agent and the LLM.
 
-Runs on headers, labels and Gmail's snippet only (gmail.py), never the full body. Rules
-are fixed and readable on purpose: cheap (T24), predictable, and easy to test. The cost
-is that an unusually worded request can be missed (E9), which is why skipped emails are
-recorded for the daily summary instead of vanishing.
+Rules are fixed and readable on purpose: cheap (T24), predictable, and easy to test. The
+cost is that an unusually worded request can be missed (E9), which is why skipped emails
+are recorded for the daily summary instead of vanishing.
 
 Order matters:
 1. Never process: not in the inbox (spam, drafts), or written by the user (T25).
 2. Never answer machines: auto-replies, even inside a tracked thread (T25).
 3. A thread the agent is already coordinating passes: "Tuesday works" has no keywords.
 4. Bulk mail is skipped: mailing lists, newsletters, promotions, no-reply senders.
-5. Calendar invitations and scheduling words pass; everything else is skipped.
+5. Calendar invitations pass.
+6. Scheduling words or phrases anywhere in the subject or the new part of the body pass;
+   everything else is skipped. Requests usually sit inside the text ("...so when works
+   for you next week?"), not in the subject.
+
+Rules 1-5 read headers and labels only. The body is read (through `read_body`) only for
+rule 6, so newsletters and auto-replies are decided without opening them. A body read for
+a skipped email is used for this check only: never stored, logged or sent to the model.
 """
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from email.utils import parseaddr
 from enum import StrEnum
 
 from google_gateway.gmail import MessageMeta
+from google_gateway.mail_body import strip_quoted
 
 
 class Reason(StrEnum):
@@ -51,6 +59,18 @@ _ENGLISH = re.compile(
     re.I,
 )
 _HEBREW = re.compile(r"פגיש|להיפגש|נפגש|שיחה|שיחת|לקבוע|זמי[נן]|פנוי|זום")
+# How requests are actually phrased, without any of the words above.
+_ENGLISH_PHRASES = re.compile(
+    r"\bwhen (works|would work|is good|suits|are you free)|\bgood time\b|\bfree (on|this|next)\b|"
+    r"\b(a few|\d+) min(ute)?s\b|\bhalf an hour\b|\bhop on\b|\bfind a time\b|"
+    r"\bset up a time\b|\btime to (talk|chat)\b|\blet'?s (talk|chat)\b",
+    re.I,
+)
+_HEBREW_PHRASES = re.compile(
+    r"מתי נוח|מתי (את|אתה|אתם|תהיה|תהיי)|חצי שעה|רבע שעה|כמה דקות|לדבר|נדבר|להתקשר|נתקשר|"
+    r"לשבת על|נשב על"
+)
+_SCHEDULING = (_ENGLISH, _HEBREW, _ENGLISH_PHRASES, _HEBREW_PHRASES)
 
 
 @dataclass(frozen=True)
@@ -70,7 +90,9 @@ def sender_address(meta: MessageMeta) -> str:
     return parseaddr(meta.header("From"))[1].lower()
 
 
-def classify(meta: MessageMeta, *, user_email: str, tracked_thread: bool) -> Decision:
+def classify(
+    meta: MessageMeta, *, user_email: str, tracked_thread: bool, read_body: Callable[[], str]
+) -> Decision:
     if meta.labels & _NOT_INBOX_LABELS or "INBOX" not in meta.labels:
         return Decision(Reason.NOT_INBOX)
     sender = sender_address(meta)
@@ -89,8 +111,9 @@ def classify(meta: MessageMeta, *, user_email: str, tracked_thread: bool) -> Dec
     subject = meta.header("Subject")
     if _INVITATION.search(subject.strip()):
         return Decision(Reason.INVITATION)
-    text = f"{subject}\n{meta.snippet}"
-    if _ENGLISH.search(text) or _HEBREW.search(text):
+    # Only the new part: a request quoted from an older message is not a new request.
+    text = f"{subject}\n{strip_quoted(read_body())}"
+    if any(pattern.search(text) for pattern in _SCHEDULING):
         return Decision(Reason.KEYWORD)
     return Decision(Reason.NO_MATCH)
 

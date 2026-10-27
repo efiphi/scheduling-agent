@@ -42,6 +42,9 @@ select = [
   "S",       # bandit: security issues (hardcoded secrets, unsafe calls)
 ]
 
+# Hebrew letters that look like Latin ones. The project reads and writes Hebrew on purpose.
+allowed-confusables = ["ו", "ן", "ס", "י", "׳"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["api", "db", "google_gateway", "shared"]
 

@@ -50,14 +50,26 @@ def test_meeting_request_reaches_the_agent_as_untrusted_data(s: Setup) -> None:
     assert participants == ["bob@example.org", "dana@example.org"]
 
 
-def test_skipped_email_keeps_sender_and_subject_only_and_body_is_never_fetched(
-    s: Setup,
-) -> None:
-    s.gmail.add(meta("m1", subject="Invoice #12", snippet="attached"), body="secret body")
+def test_skipped_email_keeps_sender_and_subject_only(s: Setup) -> None:
+    s.gmail.add(meta("m1", subject="Invoice #12"), body="secret body")
     assert s.poller.poll_user(s.user) == {"no_match": 1}
     assert s.coord.queue == []
-    assert s.gmail.bodies_read == []
+    # The body was read to look for a request, then dropped: never stored.
     assert s.store.skipped == [(s.user, "dana@example.org", "Invoice #12")]
+    assert "secret body" not in str(s.store)
+
+
+def test_newsletter_body_is_never_fetched(s: Setup) -> None:
+    s.gmail.add(meta("m1", subject="Book a call!", List_Id="<news.example.org>"))
+    assert s.poller.poll_user(s.user) == {"bulk": 1}
+    assert s.gmail.bodies_read == []
+
+
+def test_body_is_fetched_once_for_filter_and_task(s: Setup) -> None:
+    s.gmail.add(meta("m1", subject="Re: report"), body="When works for you?")
+    assert s.poller.poll_user(s.user) == {"keyword": 1}
+    assert s.gmail.bodies_read == ["m1"]
+    assert s.coord.queue[0].email.body_text == "When works for you?"
 
 
 def test_history_id_advances_after_the_batch(s: Setup) -> None:

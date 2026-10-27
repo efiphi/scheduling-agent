@@ -46,16 +46,20 @@ The full list is in [`CLAUDE.md`](CLAUDE.md) (security invariants) and the threa
 ## Repository layout
 
 ```
-services/api/          FastAPI service (web app API, webhooks, approvals) + Dockerfile
-packages/shared/       Schemas shared by the services (Pydantic StrictModel)
-web/                   React + TypeScript web app (Hebrew, right-to-left, mobile-first)
-deploy/compose/        Local stack: Postgres, Redis, api; database roles and their tests
+services/api/             FastAPI service (web app API, webhooks, approvals) + Dockerfile
+services/google_gateway/  The only holder of Google tokens: OAuth connect, Gmail polling and
+                          the rule filter, token encryption + Dockerfile
+packages/db/              SQLAlchemy models, Alembic migrations (RLS, grants), owner tools
+packages/shared/          Messages between the services (Pydantic StrictModel)
+web/                      React + TypeScript web app (Hebrew, right-to-left, mobile-first)
+deploy/compose/           Local stack: Postgres, Redis, api, google-gateway, gmail-poller;
+                          database roles and their tests
 docs/                  Design docs (Hebrew): use cases, threat model, architecture, web app
 docs/adr/              Architecture decision records (English)
 .github/workflows/     CI
 ```
 
-`google-gateway` and `agent` join `services/` in Layer 1, when they get real code.
+The `agent` joins `services/` in step 1.6.
 
 ## Quick start
 
@@ -68,15 +72,30 @@ uv sync
 uv run pytest
 ```
 
-**Local stack** — Postgres, Redis and the api, with every port bound to `127.0.0.1`:
+**Local stack** — every port bound to `127.0.0.1`:
 
 ```bash
 cp deploy/compose/.env.example deploy/compose/.env
 # replace every "change-me" in deploy/compose/.env with a random value:
 #   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
-docker compose -f deploy/compose/compose.yaml up -d --wait
+# TOKEN_ENCRYPTION_KEYS:   uv run --package google-gateway python -m google_gateway.keys
+docker compose -f deploy/compose/compose.yaml up -d --wait postgres redis api
 curl http://127.0.0.1:8000/healthz
 ```
+
+**Connect a Google account** (needs a Google Cloud OAuth client, ADR-010; the app stays in testing mode, so only its test users can connect):
+
+```bash
+# GOOGLE_CONNECT_CLIENT_ID / _SECRET in deploy/compose/.env, then:
+(cd packages/db && MIGRATION_DATABASE_URL=... uv run alembic upgrade head)
+docker compose -f deploy/compose/compose.yaml up -d --wait google-gateway gmail-poller
+uv run --env-file deploy/compose/.env python -m db.dev create-user --email <demo account>
+uv run --env-file deploy/compose/.env python -m google_gateway.connect --user-id <id>
+# open the printed link, consent, then:
+uv run --env-file deploy/compose/.env python -m google_gateway.verify --user-id <id>
+```
+
+From then on `gmail-poller` checks the mailbox every minute. Skipped emails are kept 7 days; the cleanup runs as the database owner: `python -m db.maintenance purge-skipped`.
 
 Prove the database roles hold up (15 attack-style checks):
 
@@ -111,7 +130,7 @@ Every commit then runs gitleaks (secrets), ruff (Python lint and format) and bas
 | Python dependency audit | `uv run pip-audit --skip-editable` |
 | Web lint / types / tests / build | `cd web && npm run lint && npm run typecheck && npm test && npm run build` |
 
-**CI** runs on every pull request: gitleaks over the full history; Python (ruff, mypy, pytest, pip-audit); the web app (`npm audit`, lint, types, tests, build); the api image build (non-root check, Compose validation); and the database role tests against a fresh Postgres with throwaway passwords. Third-party actions and base images are pinned to commit SHAs and digests.
+**CI** runs on every pull request: gitleaks over the full history; Python (ruff, mypy, pytest, pip-audit); the web app (`npm audit`, lint, types, tests, build); both image builds (non-root check, no Google libraries in the api image, a google-gateway smoke test, Compose validation); and the database role, RLS and Redis tests against a fresh Postgres and Redis with throwaway passwords. Third-party actions and base images are pinned to commit SHAs and digests.
 
 ## Build layers
 

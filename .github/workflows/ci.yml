@@ -60,7 +60,7 @@ jobs:
       - run: uv run pip-audit --skip-editable
 
   docker:
-    name: Docker (build api image, validate Compose)
+    name: Docker (build images, smoke-test the gateway, validate Compose)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,8 +70,38 @@ jobs:
       - name: Build api image
         run: docker build -f services/api/Dockerfile -t scheduling-agent-api:ci .
 
-      - name: Image runs as a non-root user
-        run: test "$(docker image inspect scheduling-agent-api:ci --format '{{.Config.User}}')" = "10001:10001"
+      - name: Build google-gateway image
+        run: docker build -f services/google_gateway/Dockerfile -t scheduling-agent-gateway:ci .
+
+      - name: Images run as a non-root user
+        run: |
+          for image in scheduling-agent-api:ci scheduling-agent-gateway:ci; do
+            test "$(docker image inspect "$image" --format '{{.Config.User}}')" = "10001:10001"
+          done
+
+      # Invariant 1 at the image level: the api cannot call Google even if compromised,
+      # because the code to do so is not there.
+      - name: The api image has no Google client libraries
+        run: |
+          docker run --rm --entrypoint python scheduling-agent-api:ci -c \
+            "import importlib.util as u, sys; sys.exit(any(u.find_spec(m) for m in ('google_gateway', 'googleapiclient', 'google_auth_oauthlib')))"
+
+      # The gateway starts and answers /healthz with throwaway values. It touches neither
+      # the database nor Redis until a request needs them.
+      - name: Smoke-test the google-gateway container
+        run: |
+          key=$(docker run --rm scheduling-agent-gateway:ci python -m google_gateway.keys)
+          echo "::add-mask::$key"
+          docker run -d --name gateway --read-only --cap-drop ALL -p 127.0.0.1:8001:8001 \
+            -e GOOGLE_CONNECT_CLIENT_ID=ci-placeholder -e GOOGLE_CONNECT_CLIENT_SECRET=ci-placeholder \
+            -e GATEWAY_DB_PASSWORD=ci-placeholder -e REDIS_PASSWORD=ci-placeholder \
+            -e TOKEN_ENCRYPTION_KEYS="$key" scheduling-agent-gateway:ci
+          for i in $(seq 1 20); do
+            curl -sf http://127.0.0.1:8001/healthz && exit 0
+            sleep 1
+          done
+          docker logs gateway
+          exit 1
 
       # Placeholder values only; real secrets live in a git-ignored .env (T17).
       - name: Validate Compose file
@@ -81,6 +111,9 @@ jobs:
           OWNER_DB_PASSWORD: ci-placeholder
           API_DB_PASSWORD: ci-placeholder
           GATEWAY_DB_PASSWORD: ci-placeholder
+          GOOGLE_CONNECT_CLIENT_ID: ci-placeholder
+          GOOGLE_CONNECT_CLIENT_SECRET: ci-placeholder
+          TOKEN_ENCRYPTION_KEYS: ci-placeholder
         run: docker compose -f deploy/compose/compose.yaml config --quiet
 
   database:

@@ -14,6 +14,8 @@ x-hardening: &hardening
 
 # What both google-gateway processes need: their own database role, Redis, the Google
 # client and the token encryption key. Nothing else from .env (no owner or api password).
+# The Google values are optional here, so `up postgres redis api` works without a Google
+# client; the gateway itself refuses to start without them (config.py, ConfigError).
 x-gateway-runtime: &gateway-runtime
   read_only: true
   tmpfs: [/tmp]
@@ -23,9 +25,9 @@ x-gateway-runtime: &gateway-runtime
     REDIS_HOST: redis
     GATEWAY_DB_PASSWORD: ${GATEWAY_DB_PASSWORD:?set GATEWAY_DB_PASSWORD in deploy/compose/.env}
     REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in deploy/compose/.env}
-    GOOGLE_CONNECT_CLIENT_ID: ${GOOGLE_CONNECT_CLIENT_ID:?set GOOGLE_CONNECT_CLIENT_ID in deploy/compose/.env}
-    GOOGLE_CONNECT_CLIENT_SECRET: ${GOOGLE_CONNECT_CLIENT_SECRET:?set GOOGLE_CONNECT_CLIENT_SECRET in deploy/compose/.env}
-    TOKEN_ENCRYPTION_KEYS: ${TOKEN_ENCRYPTION_KEYS:?set TOKEN_ENCRYPTION_KEYS in deploy/compose/.env}
+    GOOGLE_CONNECT_CLIENT_ID: ${GOOGLE_CONNECT_CLIENT_ID:-}
+    GOOGLE_CONNECT_CLIENT_SECRET: ${GOOGLE_CONNECT_CLIENT_SECRET:-}
+    TOKEN_ENCRYPTION_KEYS: ${TOKEN_ENCRYPTION_KEYS:-}
   depends_on:
     postgres: { condition: service_healthy }
     redis: { condition: service_healthy }

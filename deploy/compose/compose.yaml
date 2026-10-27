@@ -12,6 +12,24 @@ x-hardening: &hardening
   cap_drop: [ALL]
   security_opt: ["no-new-privileges:true"]
 
+# What both google-gateway processes need: their own database role, Redis, the Google
+# client and the token encryption key. Nothing else from .env (no owner or api password).
+x-gateway-runtime: &gateway-runtime
+  read_only: true
+  tmpfs: [/tmp]
+  restart: unless-stopped
+  environment:
+    DB_HOST: postgres
+    REDIS_HOST: redis
+    GATEWAY_DB_PASSWORD: ${GATEWAY_DB_PASSWORD:?set GATEWAY_DB_PASSWORD in deploy/compose/.env}
+    REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in deploy/compose/.env}
+    GOOGLE_CONNECT_CLIENT_ID: ${GOOGLE_CONNECT_CLIENT_ID:?set GOOGLE_CONNECT_CLIENT_ID in deploy/compose/.env}
+    GOOGLE_CONNECT_CLIENT_SECRET: ${GOOGLE_CONNECT_CLIENT_SECRET:?set GOOGLE_CONNECT_CLIENT_SECRET in deploy/compose/.env}
+    TOKEN_ENCRYPTION_KEYS: ${TOKEN_ENCRYPTION_KEYS:?set TOKEN_ENCRYPTION_KEYS in deploy/compose/.env}
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+
 services:
   postgres:
     image: postgres:18-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
@@ -71,6 +89,29 @@ services:
     tmpfs: [/tmp]
     ports: ["127.0.0.1:8000:8000"]
     depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  # google-gateway: one image, two processes. Only these two containers get Google
+  # secrets and the token key; the api container gets none of them (invariant 1).
+  google-gateway:
+    build:
+      context: ../..
+      dockerfile: services/google_gateway/Dockerfile
+    image: scheduling-agent-gateway:dev
+    <<: [*hardening, *gateway-runtime]
+    # The OAuth callback (ADR-010). Port and path match the gateway-connect client.
+    ports: ["127.0.0.1:8001:8001"]
+
+  gmail-poller:
+    image: scheduling-agent-gateway:dev
+    <<: [*hardening, *gateway-runtime]
+    # Every minute, every connected mailbox (ADR-003). A CronJob in Layer 2.
+    command: ["python", "-m", "google_gateway.poll", "--every", "60"]
+    # No HTTP server, so no health check; restart if the process dies.
+    healthcheck: { disable: true }
+    depends_on:
+      google-gateway: { condition: service_started }
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
 

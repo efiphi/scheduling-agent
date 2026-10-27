@@ -9,10 +9,9 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from sqlalchemy import Engine, text
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.sql.expression import bindparam
 
 from db.session import set_user_context
+from google_gateway.events import write_audit, write_security_event
 from google_gateway.token_crypto import EncryptedToken
 
 
@@ -29,15 +28,6 @@ class CredentialRepository(Protocol):
 
     def security_event(self, user_id: UUID | None, kind: str, details: dict[str, Any]) -> None: ...
 
-
-_AUDIT = text(
-    "INSERT INTO app.audit_log (user_id, actor, action, details)"
-    " VALUES (:user_id, 'gateway', :action, :details)"
-).bindparams(bindparam("details", type_=JSONB))
-
-_SECURITY_EVENT = text(
-    "INSERT INTO app.security_events (user_id, kind, details) VALUES (:user_id, :kind, :details)"
-).bindparams(bindparam("details", type_=JSONB))
 
 # A reconnect replaces the old token: the newest consent is the one that counts.
 _UPSERT = text(
@@ -75,10 +65,7 @@ class SqlCredentialRepository:
                     "scopes": scopes,
                 },
             )
-            conn.execute(
-                _AUDIT,
-                {"user_id": user_id, "action": "google_connected", "details": {"scopes": scopes}},
-            )
+            write_audit(conn, user_id, "google_connected", {"scopes": scopes})
 
     def load_credentials(self, user_id: UUID) -> tuple[EncryptedToken, list[str]] | None:
         with self._engine.begin() as conn:
@@ -97,10 +84,10 @@ class SqlCredentialRepository:
     def audit(self, user_id: UUID, action: str, details: dict[str, Any]) -> None:
         with self._engine.begin() as conn:
             set_user_context(conn, user_id)
-            conn.execute(_AUDIT, {"user_id": user_id, "action": action, "details": details})
+            write_audit(conn, user_id, action, details)
 
     def security_event(self, user_id: UUID | None, kind: str, details: dict[str, Any]) -> None:
         with self._engine.begin() as conn:
             if user_id is not None:
                 set_user_context(conn, user_id)
-            conn.execute(_SECURITY_EVENT, {"user_id": user_id, "kind": kind, "details": details})
+            write_security_event(conn, user_id, kind, details)

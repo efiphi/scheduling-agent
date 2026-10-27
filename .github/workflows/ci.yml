@@ -53,8 +53,8 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
-      # Tests that need a real Postgres run in the database job.
-      - run: uv run pytest -m "not db"
+      # Tests that need a real Postgres or Redis run in the database job.
+      - run: uv run pytest -m "not db and not redis"
       # Our own workspace packages are editable and not on PyPI, so they are skipped;
       # any known vulnerability in a third-party dependency still fails the job.
       - run: uv run pip-audit --skip-editable
@@ -84,7 +84,7 @@ jobs:
         run: docker compose -f deploy/compose/compose.yaml config --quiet
 
   database:
-    name: Database roles, migrations and permissions (T3, T10, T13, T16)
+    name: Database and Redis, roles, migrations and permissions (T3, T10, T13, T16, T24)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -100,8 +100,8 @@ jobs:
             echo "$name=$value" >> "$GITHUB_ENV"
           done
 
-      - name: Start Postgres (runs init/01-roles.sh on an empty volume)
-        run: docker compose -f deploy/compose/compose.yaml up -d --wait postgres
+      - name: Start Postgres (runs init/01-roles.sh on an empty volume) and Redis
+        run: docker compose -f deploy/compose/compose.yaml up -d --wait postgres redis
 
       - name: Attack the roles
         run: docker compose -f deploy/compose/compose.yaml exec -T postgres sh /tests/test-roles.sh
@@ -118,12 +118,12 @@ jobs:
           # Fails if the models and the migrations disagree.
           uv run alembic check
 
-      - name: Attack the tables (T3, T10, T13, T16)
+      - name: Attack the tables, test the Redis coordination (T3, T10, T13, T16, T24)
         env:
           REQUIRE_DB: "1"
-        run: uv run pytest -m db -v
+        run: uv run pytest -m "db or redis" -v
 
-      - name: Stop Postgres
+      - name: Stop Postgres and Redis
         if: always()
         run: docker compose -f deploy/compose/compose.yaml down --volumes
 

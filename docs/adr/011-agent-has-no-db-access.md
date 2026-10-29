@@ -12,8 +12,9 @@ The agent is the only service that reads untrusted content and passes it to an L
 The agent has no database role and no database network access.
 
 - Each task the gateway (or `api`, for WhatsApp commands) puts on the Redis stream carries the minimal context the agent needs: relevant settings and the contacts already in the thread.
-- Free/busy is a request/reply over Redis: the agent writes a request with a correlation ID to a stream the gateway consumes, and waits for the reply on its own stream. The reply contains busy intervals only — no titles, attendees or descriptions (invariant 5, E6).
-- LangGraph checkpoints are stored in Redis (ADR-004).
+- Free/busy is a request/reply over Redis: the agent writes a request with a correlation ID to a stream the gateway consumes, and waits for the reply on a key named after its request. The reply contains busy intervals only — no titles, attendees or descriptions (invariant 5, E6).
+- LangGraph checkpoints, if ever needed, are stored in Redis (deferred for now, ADR-002).
+- **Implementation (step 1.6b):** the agent writes `FreeBusyRequest` to the `gateway:free-busy-requests` stream and waits (BLPOP) on a reply key named after the request id, so only the agent that asked gets the answer, even with several replicas. In Docker Compose the agent sits on a network that reaches Redis only: it cannot even resolve the database's hostname. Its image contains no database driver and no Google library (checked in CI).
 
 ## Alternatives considered
 

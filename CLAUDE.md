@@ -38,7 +38,7 @@ If a doc and the code disagree, stop and ask which one is right. If a decision c
 |---|---|---|
 | `api` | Web app API, WhatsApp webhooks (signature-verified), Google login (identity only), approvals. Sole holder of the Meta token | Python, FastAPI |
 | `google-gateway` | The only holder of Google tokens; OAuth callback, email polling + rule-based filter, free/busy, policy guard, creates pending actions, builds outbound email from a template, execution | Python |
-| `agent` | Understands requests, returns a structured action plan (JSON validated against a schema). No tokens, no DB role; network access only to Redis (queues, free/busy request/reply, graph checkpoints) and the LLM provider | Python, LangGraph |
+| `agent` | Understands requests, returns a structured action plan (JSON validated against a schema). No tokens, no DB role; network access only to Redis (queues, free/busy request/reply) and the LLM provider | Python, LangGraph |
 | `web` | Approval queue, history, summaries, contacts, settings | React, TypeScript, Vite |
 
 Data: PostgreSQL (with RLS) and Redis Streams (queues, locks, rate limits). Scheduled jobs run as Kubernetes CronJobs later; Docker Compose locally first.

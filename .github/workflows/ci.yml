@@ -73,9 +73,12 @@ jobs:
       - name: Build google-gateway image
         run: docker build -f services/google_gateway/Dockerfile -t scheduling-agent-gateway:ci .
 
+      - name: Build agent image
+        run: docker build -f services/agent/Dockerfile -t scheduling-agent-agent:ci .
+
       - name: Images run as a non-root user
         run: |
-          for image in scheduling-agent-api:ci scheduling-agent-gateway:ci; do
+          for image in scheduling-agent-api:ci scheduling-agent-gateway:ci scheduling-agent-agent:ci; do
             test "$(docker image inspect "$image" --format '{{.Config.User}}')" = "10001:10001"
           done
 
@@ -85,6 +88,13 @@ jobs:
         run: |
           docker run --rm --entrypoint python scheduling-agent-api:ci -c \
             "import importlib.util as u, sys; sys.exit(any(u.find_spec(m) for m in ('google_gateway', 'googleapiclient', 'google_auth_oauthlib')))"
+
+      # ADR-011 at the image level: the agent, which reads untrusted email, has no code to
+      # reach the database or Google with.
+      - name: The agent image has no database or Google libraries
+        run: |
+          docker run --rm --entrypoint python scheduling-agent-agent:ci -c \
+            "import importlib.util as u, sys; sys.exit(any(u.find_spec(m) for m in ('db', 'sqlalchemy', 'psycopg', 'google_gateway', 'googleapiclient')))"
 
       # The gateway starts and answers /healthz with throwaway values. It touches neither
       # the database nor Redis until a request needs them.

@@ -3,7 +3,7 @@ name = "agent"
 version = "0.0.0"
 description = "Understands meeting requests and returns a structured plan. No tokens, no database (ADR-011)."
 requires-python = ">=3.12"
-dependencies = ["anthropic", "shared"]
+dependencies = ["anthropic", "langgraph", "redis", "shared"]
 
 [tool.uv.sources]
 shared = { workspace = true }

@@ -108,7 +108,7 @@ testpaths = [
 addopts = ["--strict-markers", "--import-mode=importlib"]
 # Shared fakes for the gateway tests (gateway_fakes.py) importable by name, and the
 # repository root, so tests can import the eval harness (evals/).
-pythonpath = ["services/google_gateway/tests", "."]
+pythonpath = ["services/google_gateway/tests", "services/agent/tests", "."]
 markers = [
   "db: needs a running Postgres with the roles and migrations applied",
   "redis: needs a running Redis",

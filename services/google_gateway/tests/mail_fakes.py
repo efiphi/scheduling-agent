@@ -166,3 +166,6 @@ class FakeCoordination:
 
     def enqueue(self, task: EmailTask) -> None:
         self.queue.append(task)
+
+    def task_owner(self, task_id: UUID) -> UUID | None:
+        return next((t.user_id for t in self.queue if t.task_id == task_id), None)

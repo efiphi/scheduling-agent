@@ -105,14 +105,22 @@ name = "api"
 version = "0.0.0"
 source = { editable = "services/api" }
 dependencies = [
+    { name = "db" },
     { name = "fastapi" },
+    { name = "google-auth" },
+    { name = "httpx2" },
+    { name = "redis" },
     { name = "shared" },
     { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "db", editable = "packages/db" },
     { name = "fastapi" },
+    { name = "google-auth" },
+    { name = "httpx2" },
+    { name = "redis" },
     { name = "shared", editable = "packages/shared" },
     { name = "uvicorn" },
 ]

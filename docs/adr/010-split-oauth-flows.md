@@ -26,6 +26,8 @@ Two separate OAuth flows:
 
 Not requested: `https://mail.google.com/` (full access, includes permanent delete), `gmail.modify` (can trash messages), `calendar` (can delete whole calendars and change sharing), `profile`.
 
+**Implementation of the login flow (step 1.9):** `api` builds the consent URL itself (`openid email`, PKCE, a single-use `state` in Redis) and exchanges the code with one HTTPS call to Google's token endpoint. It uses `google-auth` only to verify the id_token's signature, issuer, audience and expiry. It has no OAuth client library and no Google API client, and CI checks that the api image contains neither. Only an existing user's verified email gets a session (invitations come later; until then users are created by the owner, `python -m db.dev create-user`).
+
 ## Alternatives considered
 
 - **One flow with all scopes, handled by `api`** — one consent screen, but `api` would see the authorization code and could exchange it for tokens, breaking invariant 1.

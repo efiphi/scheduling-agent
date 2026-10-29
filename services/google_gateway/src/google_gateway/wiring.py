@@ -7,10 +7,12 @@ from redis import Redis
 from sqlalchemy import Engine
 
 from db.engine import make_engine
+from google_gateway.calendar import CalendarReader, GoogleCalendarReader
 from google_gateway.config import GatewayConfig
 from google_gateway.connection import ConnectFlow
 from google_gateway.coordination import RedisCoordination
 from google_gateway.credentials_store import SqlCredentialRepository
+from google_gateway.free_busy_responder import FreeBusyResponder
 from google_gateway.gmail import GmailReader, GoogleGmailReader
 from google_gateway.google_oauth import FlowOAuthClient
 from google_gateway.mail_store import SqlMailStore
@@ -61,4 +63,21 @@ def mailbox_poller(config: GatewayConfig) -> MailboxPoller:
         coordination=RedisCoordination(redis_client(config)),
         open_gmail=open_gmail,
         clock=lambda: datetime.now(UTC),
+    )
+
+
+def free_busy_responder(config: GatewayConfig, consumer: str) -> FreeBusyResponder:
+    cipher = TokenCipher.from_env()
+    google = google_client(config)
+    redis = redis_client(config)
+
+    def open_calendar(user_id: UUID, token: EncryptedToken, time_zone: str) -> CalendarReader:
+        return GoogleCalendarReader(google.credentials(cipher.decrypt(token, user_id)), time_zone)
+
+    return FreeBusyResponder(
+        redis=redis,
+        store=SqlMailStore(gateway_engine(config)),
+        coordination=RedisCoordination(redis),
+        open_calendar=open_calendar,
+        consumer=consumer,
     )

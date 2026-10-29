@@ -54,7 +54,8 @@ services/google_gateway/  The only holder of Google tokens: OAuth connect, Gmail
 packages/db/              SQLAlchemy models, Alembic migrations (RLS, grants), owner tools
 packages/shared/          Messages between the services (Pydantic StrictModel)
 web/                      React + TypeScript web app (Hebrew, right-to-left, mobile-first)
-deploy/compose/           Local stack: Postgres, Redis, api, google-gateway, gmail-poller;
+deploy/compose/           Local stack: Postgres, Redis, api, google-gateway, gmail-poller,
+                          calendar-responder, agent;
                           database roles and their tests
 evals/                    Synthetic emails that score the agent's understanding (run by hand)
 docs/                  Design docs (Hebrew): use cases, threat model, architecture, web app
@@ -90,7 +91,7 @@ curl http://127.0.0.1:8000/healthz
 ```bash
 # GOOGLE_CONNECT_CLIENT_ID / _SECRET in deploy/compose/.env, then:
 (cd packages/db && MIGRATION_DATABASE_URL=... uv run alembic upgrade head)
-docker compose -f deploy/compose/compose.yaml up -d --wait google-gateway gmail-poller
+docker compose -f deploy/compose/compose.yaml up -d --wait google-gateway gmail-poller calendar-responder
 uv run --env-file deploy/compose/.env python -m db.dev create-user --email <demo account>
 uv run --env-file deploy/compose/.env python -m google_gateway.connect --user-id <id>
 # open the printed link, consent, then:

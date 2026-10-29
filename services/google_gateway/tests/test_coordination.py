@@ -98,3 +98,25 @@ def test_oauth_state_is_single_use_with_a_ten_minute_expiry(redis_client: Redis)
     assert 0 < redis_client.ttl(f"oauth-state:{state}") <= 600
     assert states.take(state) == pending
     assert states.take(state) is None
+
+
+def test_t13_task_owner_is_recorded_when_a_task_is_queued(redis_client: Redis) -> None:
+    user = uuid4()
+    task = EmailTask(
+        task_id=uuid4(),
+        user_id=user,
+        thread_id=uuid4(),
+        email=UntrustedEmail(
+            gmail_message_id="m1",
+            sender="dana@example.org",
+            subject=UntrustedText("Call?"),
+            body_text=UntrustedText("Tuesday?"),
+            received_at=NOW,
+        ),
+        context=FakeMailStore().agent_context(user, NOW),
+    )
+    coord = RedisCoordination(redis_client, stream=STREAM)
+    coord.enqueue(task)
+    assert coord.task_owner(task.task_id) == user
+    assert coord.task_owner(uuid4()) is None
+    assert 0 < redis_client.ttl(f"task-owner:{task.task_id}") <= 24 * 3600

@@ -124,6 +124,17 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
 
+  calendar-responder:
+    image: scheduling-agent-gateway:dev
+    <<: [*hardening, *gateway-runtime]
+    # Answers the agent's free/busy requests with busy times only (ADR-011, invariant 5).
+    command: ["python", "-m", "google_gateway.free_busy_responder"]
+    healthcheck: { disable: true }
+    depends_on:
+      google-gateway: { condition: service_started }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
   # The agent reads untrusted email and talks to the LLM, so it gets the least: Redis
   # only (no database network at all, ADR-011), and one secret, the Anthropic API key.
   agent:

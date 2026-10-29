@@ -6,7 +6,9 @@
   saved, or the resync after an expired history id) reaches the agent once (E8).
 - Counters that cap how many emails per hour reach the agent, per user and per sender,
   so a flood of meeting-like emails cannot burn the LLM budget (T24).
-- The task queue to the agent: a Redis Stream (consumer groups arrive with the agent, 1.6).
+- The task queue to the agent: a Redis Stream, read by the agent's consumer group.
+- Who each task belongs to, for a day. The agent can only ask about the calendar of the
+  user a task was issued for: a manipulated agent cannot ask for someone else's (T13).
 """
 
 import hashlib
@@ -23,6 +25,7 @@ from shared.streams import EMAIL_TASKS, STREAM_MAX_LENGTH
 
 LOCK_SECONDS = 120
 HANDLED_SECONDS = 7 * 24 * 3600
+TASK_OWNER_SECONDS = 24 * 3600
 RATE_WINDOW_SECONDS = 3600
 MAX_PER_USER_PER_HOUR = 20
 MAX_PER_SENDER_PER_HOUR = 5
@@ -42,6 +45,8 @@ class PollCoordination(Protocol):
         ...
 
     def enqueue(self, task: EmailTask) -> None: ...
+
+    def task_owner(self, task_id: UUID) -> UUID | None: ...
 
 
 class RedisCoordination:
@@ -83,12 +88,26 @@ class RedisCoordination:
         )
 
     def enqueue(self, task: EmailTask) -> None:
+        # Recorded before the task is visible, so the agent can never ask about it first.
+        self._redis.set(_owner_key(task.task_id), str(task.user_id), ex=TASK_OWNER_SECONDS)
         self._redis.xadd(
             self._stream,
             {"task": task.model_dump_json()},
             maxlen=STREAM_MAX_LENGTH,
             approximate=True,
         )
+
+    def task_owner(self, task_id: UUID) -> UUID | None:
+        owner = self._redis.get(_owner_key(task_id))
+        return (
+            None
+            if owner is None
+            else UUID(owner.decode() if isinstance(owner, bytes) else str(owner))
+        )
+
+
+def _owner_key(task_id: UUID) -> str:
+    return f"task-owner:{task_id}"
 
 
 def _handled_key(user_id: UUID, message_id: str) -> str:

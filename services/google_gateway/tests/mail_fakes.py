@@ -7,6 +7,7 @@ from datetime import UTC, datetime, time
 from typing import Any
 from uuid import UUID, uuid4
 
+from google_gateway.coordination import TaskRecord
 from google_gateway.gmail import HistoryExpired, MessageMeta, MessageRef
 from google_gateway.mail_store import Mailbox
 from google_gateway.token_crypto import EncryptedToken
@@ -168,4 +169,13 @@ class FakeCoordination:
         self.queue.append(task)
 
     def task_owner(self, task_id: UUID) -> UUID | None:
-        return next((t.user_id for t in self.queue if t.task_id == task_id), None)
+        record = self.task_record(task_id)
+        return None if record is None else record.user_id
+
+    def task_record(self, task_id: UUID) -> TaskRecord | None:
+        task = next((t for t in self.queue if t.task_id == task_id), None)
+        if task is None:
+            return None
+        return TaskRecord(
+            user_id=task.user_id, thread_id=task.thread_id, subject=task.email.subject
+        )

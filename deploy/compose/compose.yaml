@@ -135,6 +135,17 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
 
+  plan-handler:
+    image: scheduling-agent-gateway:dev
+    <<: [*hardening, *gateway-runtime]
+    # Agent plans -> policy guard -> email template -> pending action (invariant 3).
+    command: ["python", "-m", "google_gateway.plan_handler"]
+    healthcheck: { disable: true }
+    depends_on:
+      google-gateway: { condition: service_started }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
   # The agent reads untrusted email and talks to the LLM, so it gets the least: Redis
   # only (no database network at all, ADR-011), and one secret, the Anthropic API key.
   agent:

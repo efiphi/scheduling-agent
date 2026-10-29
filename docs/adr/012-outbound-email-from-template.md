@@ -9,11 +9,13 @@ Every email the agent sends on the user's behalf must contain only scheduling co
 
 ## Decision
 
-The agent's plan contains structured fields — recipients, the chosen slots as timestamps with time zones, the language, and a short free-text opening line (length-limited). `google-gateway` builds the email from a fixed template per language:
+The agent's plan contains structured fields — the chosen slots as timestamps with time zones, the language, and a short free-text opening line (length-limited). `google-gateway` builds the email from a fixed template per language:
 
 - Slots are formatted by code, with the time zone stated explicitly (E3).
 - The disclosure line is added by code, always.
 - The model's opening line is the only free text. The policy guard checks it for length, links, email addresses, phone numbers and any non-scheduling content, and the preview highlights it (E5, T12).
+
+**Update 2026-10-30 (step 1.8):** the plan has no recipients field at all (`shared.messages`): the gateway takes recipients from the thread's participants, minus the user, so a manipulated model has nowhere to write an address (T5). The incoming subject is reused for "Re:" with line breaks removed, since a line break in a header could inject another header. Implemented in `google_gateway/email_template.py`; the guard is `policy_guard.py`.
 
 ## Alternatives considered
 

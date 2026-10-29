@@ -176,6 +176,8 @@ class PendingAction(Base):
         ),
         CheckConstraint(_in("kind", ACTION_KINDS), name="pending_actions_kind"),
         CheckConstraint(_in("status", ACTION_STATUSES), name="pending_actions_status"),
+        # One action per agent task: a plan delivered twice creates nothing new (E8).
+        UniqueConstraint("user_id", "task_id", name="pending_actions_user_task"),
     )
 
     action_id: Mapped[UUID] = _uuid_pk()
@@ -186,6 +188,8 @@ class PendingAction(Base):
     kind: Mapped[str] = mapped_column(Text, nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    # The agent task this action came from; NULL for actions from a direct command.
+    task_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
     failure_reason: Mapped[str | None] = mapped_column(Text)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -223,6 +227,39 @@ class Approval(Base):
     channel: Mapped[str] = mapped_column(Text, nullable=False)
     approved_at: Mapped[datetime] = _created_at()
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class UserQuestion(Base):
+    """The agent could not decide and asks the user, instead of guessing (UC-M7).
+
+    Shown in the web app (and later on WhatsApp). The question text is written by the
+    agent's code or the model, so it is shown as plain text only (T19).
+    """
+
+    __tablename__ = "user_questions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "task_id", name="user_questions_user_task"),
+        ForeignKeyConstraint(
+            ["user_id", "thread_id"],
+            ["threads.user_id", "threads.thread_id"],
+            name="user_questions_thread_same_user",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            _in("status", ("open", "answered", "dismissed")), name="user_questions_status"
+        ),
+    )
+
+    question_id: Mapped[UUID] = _uuid_pk()
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
+    )
+    thread_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    task_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="open")
+    created_at: Mapped[datetime] = _created_at()
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AuditLog(Base):

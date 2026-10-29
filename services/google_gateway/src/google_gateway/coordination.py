@@ -7,8 +7,9 @@
 - Counters that cap how many emails per hour reach the agent, per user and per sender,
   so a flood of meeting-like emails cannot burn the LLM budget (T24).
 - The task queue to the agent: a Redis Stream, read by the agent's consumer group.
-- Who each task belongs to, for a day. The agent can only ask about the calendar of the
-  user a task was issued for: a manipulated agent cannot ask for someone else's (T13).
+- What each task was, for a day: which user it belongs to, and the subject of the email
+  it answers. The agent can only ask about the calendar of the user a task was issued for
+  (T13), and a plan is accepted only for a task the gateway issued.
 """
 
 import hashlib
@@ -21,6 +22,7 @@ from redis import Redis
 from redis.exceptions import LockError
 
 from shared.messages import EmailTask
+from shared.schema import StrictModel
 from shared.streams import EMAIL_TASKS, STREAM_MAX_LENGTH
 
 LOCK_SECONDS = 120
@@ -29,6 +31,13 @@ TASK_OWNER_SECONDS = 24 * 3600
 RATE_WINDOW_SECONDS = 3600
 MAX_PER_USER_PER_HOUR = 20
 MAX_PER_SENDER_PER_HOUR = 5
+
+
+class TaskRecord(StrictModel):
+    user_id: UUID
+    thread_id: UUID
+    # Untrusted text from the incoming email; reused only for the reply's "Re:" subject.
+    subject: str
 
 
 class PollCoordination(Protocol):
@@ -47,6 +56,8 @@ class PollCoordination(Protocol):
     def enqueue(self, task: EmailTask) -> None: ...
 
     def task_owner(self, task_id: UUID) -> UUID | None: ...
+
+    def task_record(self, task_id: UUID) -> TaskRecord | None: ...
 
 
 class RedisCoordination:
@@ -89,7 +100,10 @@ class RedisCoordination:
 
     def enqueue(self, task: EmailTask) -> None:
         # Recorded before the task is visible, so the agent can never ask about it first.
-        self._redis.set(_owner_key(task.task_id), str(task.user_id), ex=TASK_OWNER_SECONDS)
+        record = TaskRecord(
+            user_id=task.user_id, thread_id=task.thread_id, subject=task.email.subject
+        )
+        self._redis.set(_task_key(task.task_id), record.model_dump_json(), ex=TASK_OWNER_SECONDS)
         self._redis.xadd(
             self._stream,
             {"task": task.model_dump_json()},
@@ -98,16 +112,16 @@ class RedisCoordination:
         )
 
     def task_owner(self, task_id: UUID) -> UUID | None:
-        owner = self._redis.get(_owner_key(task_id))
-        return (
-            None
-            if owner is None
-            else UUID(owner.decode() if isinstance(owner, bytes) else str(owner))
-        )
+        record = self.task_record(task_id)
+        return None if record is None else record.user_id
+
+    def task_record(self, task_id: UUID) -> TaskRecord | None:
+        raw = self._redis.get(_task_key(task_id))
+        return None if raw is None else TaskRecord.model_validate_json(raw)
 
 
-def _owner_key(task_id: UUID) -> str:
-    return f"task-owner:{task_id}"
+def _task_key(task_id: UUID) -> str:
+    return f"task:{task_id}"
 
 
 def _handled_key(user_id: UUID, message_id: str) -> str:

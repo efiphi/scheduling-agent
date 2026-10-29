@@ -7,16 +7,18 @@ from redis import Redis
 from sqlalchemy import Engine
 
 from db.engine import make_engine
+from google_gateway.actions_store import SqlActionStore
 from google_gateway.calendar import CalendarReader, GoogleCalendarReader
 from google_gateway.config import GatewayConfig
 from google_gateway.connection import ConnectFlow
 from google_gateway.coordination import RedisCoordination
 from google_gateway.credentials_store import SqlCredentialRepository
-from google_gateway.free_busy_responder import FreeBusyResponder
+from google_gateway.free_busy_responder import FreeBusyResponder, OpenCalendar
 from google_gateway.gmail import GmailReader, GoogleGmailReader
 from google_gateway.google_oauth import FlowOAuthClient
 from google_gateway.mail_store import SqlMailStore
 from google_gateway.oauth_state import RedisStateStore
+from google_gateway.plan_handler import PlanHandler
 from google_gateway.poller import MailboxPoller
 from google_gateway.token_crypto import EncryptedToken, TokenCipher
 
@@ -66,18 +68,35 @@ def mailbox_poller(config: GatewayConfig) -> MailboxPoller:
     )
 
 
-def free_busy_responder(config: GatewayConfig, consumer: str) -> FreeBusyResponder:
+def _calendar_opener(config: GatewayConfig) -> OpenCalendar:
     cipher = TokenCipher.from_env()
     google = google_client(config)
-    redis = redis_client(config)
 
     def open_calendar(user_id: UUID, token: EncryptedToken, time_zone: str) -> CalendarReader:
+        # Decrypted only here, in memory, for this one read (ADR-016).
         return GoogleCalendarReader(google.credentials(cipher.decrypt(token, user_id)), time_zone)
 
+    return open_calendar
+
+
+def free_busy_responder(config: GatewayConfig, consumer: str) -> FreeBusyResponder:
+    redis = redis_client(config)
+    open_calendar = _calendar_opener(config)
     return FreeBusyResponder(
         redis=redis,
         store=SqlMailStore(gateway_engine(config)),
         coordination=RedisCoordination(redis),
         open_calendar=open_calendar,
         consumer=consumer,
+    )
+
+
+def plan_handler(config: GatewayConfig) -> PlanHandler:
+    engine = gateway_engine(config)
+    return PlanHandler(
+        actions=SqlActionStore(engine),
+        mail=SqlMailStore(engine),
+        coordination=RedisCoordination(redis_client(config)),
+        open_calendar=_calendar_opener(config),
+        clock=lambda: datetime.now(UTC),
     )

@@ -39,6 +39,7 @@ def form(**changes: Any) -> ExtractionForm:
         "earliest_date": date(2026, 11, 3),
         "latest_date": date(2026, 11, 5),
         "time_of_day": "morning",
+        "stated_weekday": None,
         "unclear": False,
         "question_for_user": None,
         "opening_line": "Thanks, here are a few times that work.",
@@ -178,3 +179,19 @@ def test_extract_reports_token_usage_for_the_cost_cap() -> None:
     result = extract(email("Can we meet Tuesday?"), CONTEXT, filler)
     assert result.usage == Usage(100, 50)
     assert len(filler.calls) == 1
+
+
+def test_e4_a_weekday_that_contradicts_its_date_asks_the_user() -> None:
+    # 3 November 2026 is a Tuesday; "Monday the 3rd" is a contradiction.
+    contradiction = form(
+        earliest_date=date(2026, 11, 3), latest_date=date(2026, 11, 3), stated_weekday="monday"
+    )
+    result = interpret(answer(contradiction), CONTEXT)
+    assert isinstance(result, Unclear) and result.reason == "weekday_mismatch"
+
+
+def test_a_weekday_that_matches_its_date_passes() -> None:
+    match = form(
+        earliest_date=date(2026, 11, 3), latest_date=date(2026, 11, 3), stated_weekday="tuesday"
+    )
+    assert isinstance(interpret(answer(match), CONTEXT), MeetingRequest)

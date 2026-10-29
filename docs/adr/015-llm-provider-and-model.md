@@ -28,6 +28,23 @@ Handling rules:
 
 **Data handling** (Anthropic's published policy, checked on 2026-10-26): inputs and outputs of the commercial API are **not used for model training** by default (exceptions: feedback submissions, or an explicit opt-in — neither is used here), and are **deleted within 30 days**, except content flagged under the Usage Policy (up to 2 years). Only filtered emails are sent, with only what extraction needs; calendar details never are (invariant 5). Development uses only the demo account and synthetic data.
 
+## Measurement (2026-10-30)
+
+The 15 synthetic emails in `evals/extraction/cases.json` (Hebrew and English, relative dates, a request buried in a thread, "after the holiday", receipts, three injection attempts), run with `python -m evals.extraction.run`:
+
+| Model | Score | Cost per run |
+|---|---|---|
+| Claude Haiku 5.5 | 14/15, 14/15 | $0.003 |
+| Claude Sonnet 5.5 | 13/15 | $0.10 |
+
+Sonnet was not better on this task and costs about 30 times more, so **Haiku 5.5 stays**. All three injection attempts failed against both: no address or link reached the opening line, and the receipt with an embedded instruction stayed "not a request".
+
+Two findings changed the code rather than the model:
+- **A weekday that contradicts its date** ("Monday the 3rd" when the 3rd is a Tuesday) was resolved silently. The form now reports the weekday as written, and code compares it with the date. A mismatch becomes a question to the user.
+- **"Next Tuesday" is ambiguous.** Adding that one field to the form flipped the model's reading of "next Tuesday" said on a Monday, from the following week to tomorrow, in both languages. The prompt now defines it: "next <weekday>" is the following week's.
+
+After both changes: 15/15, 14/15, 15/15 over three runs, at $0.004 a run. The remaining variance is where "this week" ends (Saturday or Sunday). It is harmless, because Friday and Saturday are not work days by default. **Lesson:** every prompt or schema change reruns the eval, because small changes move the model's answers.
+
 ## Alternatives considered
 
 - **Claude Sonnet 5.5** — stronger, roughly $8/month at our volume, most of the fixed budget. Kept as the fallback if measurement shows Haiku is not enough.

@@ -1,0 +1,23 @@
+"""Checks on the repository itself, for mistakes that only show up in a Docker build."""
+
+import tomllib
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+MEMBERS = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["uv"]["workspace"]["members"]
+DOCKERFILES = sorted(ROOT.glob("services/*/Dockerfile"))
+
+
+@pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=lambda p: p.parent.name)
+def test_every_dockerfile_copies_every_workspace_members_pyproject(dockerfile: Path) -> None:
+    # uv reads the whole workspace even when it installs one package, so a member added to
+    # pyproject.toml but missing here breaks that image's build (it happened in #14 and #21).
+    text = dockerfile.read_text()
+    missing = [m for m in MEMBERS if f"COPY {m}/pyproject.toml {m}/" not in text]
+    assert missing == []
+
+
+def test_there_are_dockerfiles_to_check() -> None:
+    assert len(DOCKERFILES) >= 2

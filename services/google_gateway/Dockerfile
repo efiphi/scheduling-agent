@@ -20,6 +20,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY packages/db/pyproject.toml packages/db/
 COPY packages/shared/pyproject.toml packages/shared/
+COPY services/agent/pyproject.toml services/agent/
 COPY services/api/pyproject.toml services/api/
 COPY services/google_gateway/pyproject.toml services/google_gateway/
 RUN --mount=type=cache,target=/root/.cache/uv \

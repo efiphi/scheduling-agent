@@ -12,14 +12,32 @@ requires-python = ">=3.12"
 package = false
 
 [tool.uv.workspace]
-members = ["packages/db", "packages/shared", "services/api", "services/google_gateway"]
+members = [
+  "packages/db",
+  "packages/shared",
+  "services/agent",
+  "services/api",
+  "services/google_gateway",
+]
 
 [dependency-groups]
 # The workspace members are dev dependencies of the root, so a plain `uv sync`
 # installs every package for local development, tests and type checking.
-dev = ["api", "db", "google-gateway", "httpx2", "mypy", "pip-audit", "pytest", "ruff", "shared"]
+dev = [
+  "agent",
+  "api",
+  "db",
+  "google-gateway",
+  "httpx2",
+  "mypy",
+  "pip-audit",
+  "pytest",
+  "ruff",
+  "shared",
+]
 
 [tool.uv.sources]
+agent = { workspace = true }
 api = { workspace = true }
 db = { workspace = true }
 google-gateway = { workspace = true }
@@ -46,7 +64,7 @@ select = [
 allowed-confusables = ["ו", "ן", "ס", "י", "׳"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["api", "db", "google_gateway", "shared"]
+known-first-party = ["agent", "api", "db", "evals", "google_gateway", "shared"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests use plain assert by design.
@@ -66,6 +84,10 @@ files = [
   "packages/db/tests",
   "services/google_gateway/src",
   "services/google_gateway/tests",
+  "services/agent/src",
+  "services/agent/tests",
+  "evals",
+  "tests",
 ]
 
 # Google's OAuth helper and API client ship without type information.
@@ -80,10 +102,13 @@ testpaths = [
   "services/api/tests",
   "packages/db/tests",
   "services/google_gateway/tests",
+  "services/agent/tests",
+  "tests",
 ]
 addopts = ["--strict-markers", "--import-mode=importlib"]
-# Shared fakes for the gateway tests (gateway_fakes.py), importable by name.
-pythonpath = ["services/google_gateway/tests"]
+# Shared fakes for the gateway tests (gateway_fakes.py) importable by name, and the
+# repository root, so tests can import the eval harness (evals/).
+pythonpath = ["services/google_gateway/tests", "."]
 markers = [
   "db: needs a running Postgres with the roles and migrations applied",
   "redis: needs a running Redis",

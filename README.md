@@ -46,6 +46,8 @@ The full list is in [`CLAUDE.md`](CLAUDE.md) (security invariants) and the threa
 ## Repository layout
 
 ```
+services/agent/           Understands a meeting request (Claude Haiku 5.5, structured output)
+                          and returns a plan; LangGraph; Redis only, no DB, no Google + Dockerfile
 services/api/             FastAPI service (web app API, webhooks, approvals) + Dockerfile
 services/google_gateway/  The only holder of Google tokens: OAuth connect, Gmail polling and
                           the rule filter, token encryption + Dockerfile
@@ -54,12 +56,12 @@ packages/shared/          Messages between the services (Pydantic StrictModel)
 web/                      React + TypeScript web app (Hebrew, right-to-left, mobile-first)
 deploy/compose/           Local stack: Postgres, Redis, api, google-gateway, gmail-poller;
                           database roles and their tests
+evals/                    Synthetic emails that score the agent's understanding (run by hand)
 docs/                  Design docs (Hebrew): use cases, threat model, architecture, web app
 docs/adr/              Architecture decision records (English)
 .github/workflows/     CI
 ```
 
-The `agent` joins `services/` in step 1.6.
 
 ## Quick start
 

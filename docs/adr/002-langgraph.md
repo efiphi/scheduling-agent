@@ -9,7 +9,9 @@ The agent reads untrusted content (emails, forwarded messages), extracts partici
 
 ## Decision
 
-Build the agent with LangGraph: an explicit state graph where each node is one step (extract, request availability, plan), with typed state, checkpoints stored in Redis (the agent has no database access, see ADR-011), and the plan validated against a JSON schema before it leaves the service.
+Build the agent with LangGraph: an explicit state graph where each node is one step (extract, request availability, plan), with typed state, and the plan validated against a JSON schema before it leaves the service.
+
+**Update 2026-10-30 (step 1.6b): no checkpoints for now.** A task runs from start to finish in seconds, and the human approval happens outside the graph, as a database record (invariant 4), so the graph never pauses mid-run. A crash mid-task is covered by the queue: the task is acknowledged only after its plan is published, so it is retried. Checkpoints (`langgraph-checkpoint-redis`) would add a dependency and Redis modules for no benefit today. Add them when a node needs to wait for a person or for a long external step inside the graph.
 
 ## Alternatives considered
 

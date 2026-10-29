@@ -19,10 +19,8 @@ from redis import Redis
 from redis.exceptions import LockError
 
 from shared.messages import EmailTask
+from shared.streams import EMAIL_TASKS, STREAM_MAX_LENGTH
 
-EMAIL_TASKS_STREAM = "agent:email-tasks"
-# Approximate cap on the stream, so a stuck agent cannot grow Redis without limit.
-STREAM_MAX_LENGTH = 10_000
 LOCK_SECONDS = 120
 HANDLED_SECONDS = 7 * 24 * 3600
 RATE_WINDOW_SECONDS = 3600
@@ -47,7 +45,7 @@ class PollCoordination(Protocol):
 
 
 class RedisCoordination:
-    def __init__(self, redis: Redis, stream: str = EMAIL_TASKS_STREAM) -> None:
+    def __init__(self, redis: Redis, stream: str = EMAIL_TASKS) -> None:
         self._redis = redis
         self._stream = stream
 

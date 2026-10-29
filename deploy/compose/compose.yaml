@@ -20,6 +20,7 @@ x-gateway-runtime: &gateway-runtime
   read_only: true
   tmpfs: [/tmp]
   restart: unless-stopped
+  networks: [data, queue]
   environment:
     DB_HOST: postgres
     REDIS_HOST: redis
@@ -52,6 +53,8 @@ services:
       API_DB_PASSWORD: ${API_DB_PASSWORD:?set API_DB_PASSWORD in deploy/compose/.env}
       GATEWAY_DB_PASSWORD: ${GATEWAY_DB_PASSWORD:?set GATEWAY_DB_PASSWORD in deploy/compose/.env}
     ports: ["127.0.0.1:5432:5432"]
+    networks: [data]
+    restart: unless-stopped
     volumes:
       - postgres-data:/var/lib/postgresql
       # Init scripts run only when the data volume is empty.
@@ -71,6 +74,8 @@ services:
     # a restart (ADR-004). Per-service Redis users (ACL) come with the services in Layer 1.
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in deploy/compose/.env}", "--appendonly", "yes"]
     ports: ["127.0.0.1:6379:6379"]
+    networks: [queue]
+    restart: unless-stopped
     volumes: [redis-data:/data]
     healthcheck:
       test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
@@ -89,6 +94,8 @@ services:
     # Runs as the unprivileged user from the Dockerfile, on a read-only filesystem.
     read_only: true
     tmpfs: [/tmp]
+    restart: unless-stopped
+    networks: [data, queue]
     ports: ["127.0.0.1:8000:8000"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -116,6 +123,33 @@ services:
       google-gateway: { condition: service_started }
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+
+  # The agent reads untrusted email and talks to the LLM, so it gets the least: Redis
+  # only (no database network at all, ADR-011), and one secret, the Anthropic API key.
+  agent:
+    build:
+      context: ../..
+      dockerfile: services/agent/Dockerfile
+    image: scheduling-agent-agent:dev
+    <<: *hardening
+    read_only: true
+    tmpfs: [/tmp]
+    restart: unless-stopped
+    networks: [queue]
+    environment:
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in deploy/compose/.env}
+      # Optional here so the rest of the stack starts without it; the agent refuses to.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AGENT_DAILY_BUDGET_USD: ${AGENT_DAILY_BUDGET_USD:-1.00}
+    depends_on:
+      redis: { condition: service_healthy }
+
+# "data" reaches Postgres, "queue" reaches Redis. Only services that need the database
+# join "data"; the agent is not one of them.
+networks:
+  data:
+  queue:
 
 volumes:
   postgres-data:

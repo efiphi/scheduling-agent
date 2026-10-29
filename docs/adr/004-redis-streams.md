@@ -9,7 +9,7 @@ The services hand work to each other asynchronously (gateway → agent → gatew
 
 ## Decision
 
-Use Redis for all three: Redis Streams with consumer groups for queues and request/reply, `SET NX` with an expiry for slot locks, and counters with expiry for rate limits. LangGraph checkpoints are also stored in Redis.
+Use Redis for all three: Redis Streams with consumer groups for queues and request/reply, `SET NX` with an expiry for slot locks, and counters with expiry for rate limits. LangGraph checkpoints, if the agent ever needs them, would also be stored in Redis (deferred, see ADR-002).
 
 ## Alternatives considered
 

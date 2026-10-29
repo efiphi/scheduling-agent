@@ -1,0 +1,13 @@
+[project]
+name = "agent"
+version = "0.0.0"
+description = "Understands meeting requests and returns a structured plan. No tokens, no database (ADR-011)."
+requires-python = ">=3.12"
+dependencies = ["anthropic", "shared"]
+
+[tool.uv.sources]
+shared = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14"]
+build-backend = "uv_build"

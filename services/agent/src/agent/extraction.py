@@ -30,6 +30,11 @@ DEFAULT_WINDOW_DAYS = 7
 MAX_OPENING_LINE = 200
 
 TimeOfDay = Literal["any", "morning", "afternoon", "evening"]
+Weekday = Literal["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+# Python's date.weekday(): 0 = Monday.
+_WEEKDAYS: tuple[Weekday, ...] = (
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+)  # fmt: skip
 Language = Literal["he", "en"]
 
 
@@ -50,6 +55,12 @@ class ExtractionForm(BaseModel):
         description="Last acceptable date (YYYY-MM-DD), or null if not stated."
     )
     time_of_day: TimeOfDay = Field(description="Preferred part of the day, or any.")
+    stated_weekday: Weekday | None = Field(
+        description=(
+            "If the email names a weekday together with a specific calendar date, the weekday"
+            " exactly as written (even if it does not match the date). Otherwise null."
+        )
+    )
     unclear: bool = Field(
         description="True if the request is too ambiguous to propose times without guessing."
     )
@@ -155,9 +166,14 @@ Rules:
 - is_meeting_request is true only when the sender asks to set a time to meet, call or \
 talk. Newsletters, receipts and messages that only mention a past meeting are false.
 - Resolve relative dates ("next Tuesday", "יום שלישי הבא", "next week", "בשבוע הבא") \
-using today's date and the user's time zone given below. Weeks start on Sunday.
+using today's date and the user's time zone given below. Weeks start on Sunday. \
+"Next <weekday>" ("next Tuesday", "יום שלישי הבא") means that weekday in the following \
+week, never the nearest one; "this <weekday>" or a bare weekday ("on Tuesday", "ביום \
+שלישי") means the nearest one that has not passed.
 - If no dates are mentioned, leave both dates null. If the sender gives one day, use it \
 as both dates.
+- stated_weekday: only when the email names both a weekday and a calendar date for the \
+same day, copy the weekday as written, even if it does not match the date.
 - Set unclear to true, with a short question in Hebrew, only when you cannot fill the form \
 without guessing: for example a date that depends on an event you cannot place ("after the \
 holiday"), or contradictory times.
@@ -193,6 +209,7 @@ _QUESTIONS = {
     "invalid_form": "לא הצלחתי להבין את הבקשה במייל הזה. מה השולח מבקש?",
     "bad_dates": "לא הצלחתי להבין לאיזה תאריכים השולח מתכוון. מתי לקבוע?",
     "bad_duration": "לא ברור כמה זמן השולח מבקש. כמה זמן לקבוע?",
+    "weekday_mismatch": "במייל יש סתירה בין היום בשבוע לתאריך. לאיזה מהם השולח מתכוון?",
 }
 _FALLBACK_OPENING = {
     "he": "תודה על הפנייה, הנה כמה מועדים שמתאימים לי:",
@@ -221,6 +238,14 @@ def interpret(answer: ModelAnswer, context: AgentContext) -> Extraction:
     )
     if not (today <= earliest <= latest <= today + MAX_FREE_BUSY_WINDOW):
         return _unclear("bad_dates")
+    # "Monday the 3rd" when the 3rd is a Tuesday: the email contradicts itself. Measured:
+    # the model resolves such dates without flagging them, so code checks (ADR-015).
+    if (
+        form.stated_weekday is not None
+        and earliest == latest
+        and _WEEKDAYS[earliest.weekday()] != form.stated_weekday
+    ):
+        return _unclear("weekday_mismatch")
 
     duration = (
         context.default_duration_minutes if form.duration_minutes is None else form.duration_minutes

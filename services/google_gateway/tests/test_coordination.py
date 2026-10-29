@@ -119,4 +119,6 @@ def test_t13_task_owner_is_recorded_when_a_task_is_queued(redis_client: Redis) -
     coord.enqueue(task)
     assert coord.task_owner(task.task_id) == user
     assert coord.task_owner(uuid4()) is None
-    assert 0 < redis_client.ttl(f"task-owner:{task.task_id}") <= 24 * 3600
+    assert 0 < redis_client.ttl(f"task:{task.task_id}") <= 24 * 3600
+    record = coord.task_record(task.task_id)
+    assert record is not None and record.subject == "Call?" and record.thread_id == task.thread_id

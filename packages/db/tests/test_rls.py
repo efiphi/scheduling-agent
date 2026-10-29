@@ -21,7 +21,8 @@ RLS_VIOLATION = "row-level security policy"
 
 @pytest.fixture
 def full_seed(owner: Engine, seed: Any) -> Iterator[Any]:
-    """User A also gets settings, an approval, a skipped email, an audit row, a security event."""
+    """User A also gets settings, an approval, a skipped email, a question, an audit row and
+    a security event."""
     with owner.begin() as conn:
         set_user_context(conn, seed.user_a)
         params = {"u": seed.user_a, "a": seed.action_a}
@@ -38,6 +39,10 @@ def full_seed(owner: Engine, seed: Any) -> Iterator[Any]:
                 "INSERT INTO app.skipped_emails (user_id, sender, subject, received_at)"
                 " VALUES (:u, 'news@example.com', 'Newsletter', now())"
             ),
+            params,
+        )
+        conn.execute(
+            text("INSERT INTO app.user_questions (user_id, question) VALUES (:u, 'When?')"),
             params,
         )
         conn.execute(
@@ -59,8 +64,9 @@ def count(engine: Engine, context: UUID | None, table: str, owner_id: UUID) -> i
         return int(conn.execute(sql, {"owner": owner_id}).scalar_one())
 
 
-# Tables each role may read (from migration 0001).
+# Tables each role may read (migrations 0001 and 0004).
 API_READABLE = [
+    "user_questions",
     "users",
     "settings",
     "threads",
@@ -71,6 +77,7 @@ API_READABLE = [
     "security_events",
 ]
 GATEWAY_READABLE = [
+    "user_questions",
     "users",
     "settings",
     "google_credentials",

@@ -61,3 +61,4 @@ def seed(owner: Engine) -> Iterator[Seed]:
             as_user(conn, uid)
             conn.execute(text("DELETE FROM app.users WHERE user_id = :id"), {"id": uid})
             conn.execute(text("DELETE FROM app.audit_log WHERE user_id = :id"), {"id": uid})
+            conn.execute(text("DELETE FROM app.security_events WHERE user_id = :id"), {"id": uid})

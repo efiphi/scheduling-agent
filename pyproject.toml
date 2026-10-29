@@ -87,6 +87,7 @@ files = [
   "services/agent/src",
   "services/agent/tests",
   "evals",
+  "tests",
 ]
 
 # Google's OAuth helper and API client ship without type information.
@@ -102,6 +103,7 @@ testpaths = [
   "packages/db/tests",
   "services/google_gateway/tests",
   "services/agent/tests",
+  "tests",
 ]
 addopts = ["--strict-markers", "--import-mode=importlib"]
 # Shared fakes for the gateway tests (gateway_fakes.py) importable by name, and the

@@ -172,7 +172,7 @@ jobs:
         run: docker compose -f deploy/compose/compose.yaml down --volumes
 
   web:
-    name: Web (lint, typecheck, test, build)
+    name: Web (API types, lint, typecheck, test, build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -191,6 +191,12 @@ jobs:
       # `npm ci` installs exactly what package-lock.json says, nothing newer.
       - run: npm ci
       - run: npm audit --audit-level=high
+      # The API types are generated from the api's OpenAPI schema (the Python job checks
+      # that schema is current). Regenerate and fail if the committed types differ.
+      - name: API types match the API
+        run: |
+          npm run api-types
+          git diff --exit-code src/api/schema.ts
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test

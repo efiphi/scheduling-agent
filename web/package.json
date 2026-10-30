@@ -9,7 +9,8 @@
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "api-types": "npx --yes openapi-typescript@7.13.0 src/api/openapi.json -o src/api/schema.ts"
   },
   "dependencies": {
     "react": "19.3.1",

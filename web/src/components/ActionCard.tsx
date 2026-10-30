@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { Link } from "react-router";
+
+import { useDataSource } from "../data/context";
 
 import { actionKindLabel, type PendingAction } from "../domain/actions";
 import { formatDateTime } from "../lib/time";
@@ -8,7 +11,14 @@ import { SlotTime } from "./SlotTime";
 // The card must allow a decision without opening another screen (docs/04-web-app.md).
 // Everything that came from outside is rendered as text; English inside Hebrew is
 // wrapped in <bdi> so addresses and times keep their direction.
-export function ActionCard({ action }: { action: PendingAction }) {
+export function ActionCard({
+  action,
+  onDecided,
+}: {
+  action: PendingAction;
+  /** Called after the server accepted the decision, so the queue can drop the card. */
+  onDecided?: (id: string, decision: "approved" | "rejected") => void;
+}) {
   const expired = action.status === "expired";
   const failed = action.status === "failed";
   const border = failed ? "border-red-400" : action.anomalyReason ? "border-amber-400" : "border-slate-200";
@@ -99,25 +109,58 @@ export function ActionCard({ action }: { action: PendingAction }) {
         </section>
       )}
 
-      {expired ? <PendingButton>החזר לתור</PendingButton> : <ActionButtons />}
+      {expired ? <PendingButton>החזר לתור</PendingButton> : <ActionButtons action={action} onDecided={onDecided} />}
     </article>
   );
 }
 
-// Approve / edit / reject are not wired until the API exists (Layer 1).
-function ActionButtons() {
-  const note = "יחובר בשכבה 1";
+const decisionErrors: Record<string, string> = {
+  hash_mismatch: "התוכן השתנה מאז שהוצג. רעננו את הדף.",
+  expired: "הפעולה פגה.",
+  not_pending: "הפעולה כבר טופלה.",
+  "the agent is paused": "הסוכן מושהה.",
+};
+
+// Approve sends the content hash of exactly this card: the server refuses if the content
+// changed in between (T3, T10). Edit comes after the MVP.
+function ActionButtons({
+  action,
+  onDecided,
+}: {
+  action: PendingAction;
+  onDecided?: (id: string, decision: "approved" | "rejected") => void;
+}) {
+  const source = useDataSource();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function decide(decision: "approved" | "rejected") {
+    setBusy(true);
+    setError(undefined);
+    const result = decision === "approved" ? await source.approve(action.id, action.contentHash) : await source.reject(action.id);
+    setBusy(false);
+    if (result.ok) onDecided?.(action.id, decision);
+    else setError(decisionErrors[result.reason] ?? "הפעולה נכשלה. נסו שוב.");
+  }
+
   return (
-    <div className="flex gap-2">
-      <button type="button" disabled title={note} className="flex-1 rounded-lg bg-blue-700 py-2 text-white disabled:opacity-50">
-        אשר
-      </button>
-      <button type="button" disabled title={note} className="flex-1 rounded-lg border border-slate-300 py-2 disabled:opacity-50">
-        ערוך
-      </button>
-      <button type="button" disabled title={note} className="flex-1 rounded-lg border border-slate-300 py-2 disabled:opacity-50">
-        דחה
-      </button>
-    </div>
+    <>
+      {error && (
+        <p role="alert" className="mb-2 text-sm text-red-800">
+          {error}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <button type="button" disabled={busy} onClick={() => void decide("approved")} className="flex-1 rounded-lg bg-blue-700 py-2 text-white disabled:opacity-50">
+          אשר
+        </button>
+        <button type="button" disabled title="עריכה תגיע אחרי ה-MVP" className="flex-1 rounded-lg border border-slate-300 py-2 disabled:opacity-50">
+          ערוך
+        </button>
+        <button type="button" disabled={busy} onClick={() => void decide("rejected")} className="flex-1 rounded-lg border border-slate-300 py-2 disabled:opacity-50">
+          דחה
+        </button>
+      </div>
+    </>
   );
 }

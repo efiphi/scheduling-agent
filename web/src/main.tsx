@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router";
 
 import { createRoutes } from "./app/routes";
-import { notConnectedSource } from "./data/source";
+import { createHttpSource } from "./data/httpSource";
 import "./index.css";
 
 const root = document.getElementById("root");
@@ -13,6 +13,6 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <RouterProvider router={createBrowserRouter(createRoutes(notConnectedSource))} />
+    <RouterProvider router={createBrowserRouter(createRoutes(createHttpSource()))} />
   </StrictMode>,
 );

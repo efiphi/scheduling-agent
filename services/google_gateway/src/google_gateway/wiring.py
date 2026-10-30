@@ -9,6 +9,7 @@ from sqlalchemy import Engine
 from db.engine import make_engine
 from google_gateway.actions_store import SqlActionStore
 from google_gateway.calendar import CalendarReader, GoogleCalendarReader
+from google_gateway.calendar_writer import CalendarWriter, GoogleCalendarWriter
 from google_gateway.config import GatewayConfig
 from google_gateway.connection import ConnectFlow
 from google_gateway.coordination import RedisCoordination
@@ -112,10 +113,14 @@ def executor(config: GatewayConfig) -> Executor:
     def open_sender(user_id: UUID, token: EncryptedToken) -> MailSender:
         return GoogleMailSender(google.credentials(cipher.decrypt(token, user_id)))
 
+    def open_writer(user_id: UUID, token: EncryptedToken) -> CalendarWriter:
+        return GoogleCalendarWriter(google.credentials(cipher.decrypt(token, user_id)))
+
     return Executor(
         store=SqlExecutionStore(engine),
         mail=SqlMailStore(engine),
         open_calendar=_calendar_opener(config),
         open_sender=open_sender,
+        open_writer=open_writer,
         lock=redis_user_lock(redis_client(config)),
     )

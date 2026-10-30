@@ -96,6 +96,15 @@ class FakeSender:
         return "gmail-123"
 
 
+@dataclass
+class FakeWriter:
+    created: list[tuple[UUID, dict[str, Any]]] = field(default_factory=list)
+
+    def create_event(self, idempotency_key: UUID, payload: dict[str, Any]) -> str:
+        self.created.append((idempotency_key, payload))
+        return idempotency_key.hex
+
+
 @contextmanager
 def free_lock(user_id: UUID) -> Iterator[bool]:
     yield True
@@ -106,10 +115,12 @@ def run(
     *,
     events: list[CalendarEvent] | Exception | None = None,
     sender: FakeSender | None = None,
+    writer: FakeWriter | None = None,
 ) -> tuple[str, FakeExecutionStore, FakeSender]:
     mail = FakeMailStore()
     user = mail.add_user()
     store, sender = FakeExecutionStore(action), sender or FakeSender()
+    used_writer = writer or FakeWriter()
     calendar = FakeCalendar([] if events is None else events)
 
     def open_calendar(user_id: UUID, token: EncryptedToken, time_zone: str) -> FakeCalendar:
@@ -118,8 +129,16 @@ def run(
     def open_sender(user_id: UUID, token: EncryptedToken) -> FakeSender:
         return sender
 
+    def open_writer(user_id: UUID, token: EncryptedToken) -> FakeWriter:
+        return used_writer
+
     executor = Executor(
-        store=store, mail=mail, open_calendar=open_calendar, open_sender=open_sender, lock=free_lock
+        store=store,
+        mail=mail,
+        open_calendar=open_calendar,
+        open_sender=open_sender,
+        open_writer=open_writer,
+        lock=free_lock,
     )
     return executor.execute(user, uuid4()), store, sender
 
@@ -209,3 +228,45 @@ def test_header_injection_is_refused_by_the_message_builder() -> None:
     )
     outcome, _, sender = run(action)
     assert outcome == "failed_send_error" and sender.sent == []
+
+
+EVENT: dict[str, Any] = {
+    **PAYLOAD,
+    "kind": "create_event",
+    "subject": "Meeting: Quick call?",
+    "body": "created by my assistant",
+}
+
+
+def event_action(**changes: Any) -> Approved:
+    digest = content_hash(EVENT)
+    return approved(payload=EVENT, content_hash=digest, approval_hash=digest, **changes)
+
+
+def test_uc_m2_an_approved_event_is_created_with_a_fixed_id_and_no_email() -> None:
+    writer = FakeWriter()
+    action = event_action()
+    outcome, store, sender = run(action, writer=writer)
+    assert outcome == "executed" and sender.sent == []
+    [(key, payload)] = writer.created
+    assert key == action.idempotency_key and payload["to"] == ["dana@example.org"]
+    assert store.result == ("executed", action.idempotency_key.hex)
+
+
+def test_e8_an_interrupted_event_is_safely_created_again() -> None:
+    # Same event id: Google finds the one event instead of creating a second.
+    writer = FakeWriter()
+    outcome, _, _ = run(event_action(status="executing"), writer=writer)
+    assert outcome == "executed" and len(writer.created) == 1
+
+
+def test_t5_an_event_attendee_not_in_the_thread_stops_it() -> None:
+    writer = FakeWriter()
+    outcome, _, _ = run(event_action(participants=("other@example.org",)), writer=writer)
+    assert outcome == "failed_recipient_not_in_thread" and writer.created == []
+
+
+def test_e1_an_event_slot_that_became_busy_is_not_created() -> None:
+    writer = FakeWriter()
+    outcome, _, _ = run(event_action(), events=[event(10, 11)], writer=writer)
+    assert outcome == "failed_slot_taken" and writer.created == []

@@ -4,6 +4,7 @@ The role can read users and settings, read and update google_credentials and thr
 append skipped_emails, audit_log and security_events (migration 0001).
 """
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
@@ -14,7 +15,7 @@ from sqlalchemy import Engine, text
 from db.session import set_user_context
 from google_gateway.events import write_audit, write_security_event
 from google_gateway.token_crypto import EncryptedToken
-from shared.messages import MAX_SUBJECT_CHARS, AgentContext
+from shared.messages import MAX_SUBJECT_CHARS, AgentContext, Interval
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,10 @@ class MailStore(Protocol):
     ) -> None: ...
 
     def agent_context(self, user_id: UUID, now: datetime) -> AgentContext: ...
+
+    def offered_slots(self, user_id: UUID, gmail_thread_id: str) -> tuple[Interval, ...]:
+        """The slots of the last reply actually sent in this thread (UC-M2), or none."""
+        ...
 
     def audit(self, user_id: UUID, action: str, details: dict[str, Any]) -> None: ...
 
@@ -175,6 +180,23 @@ class SqlMailStore:
             default_duration_minutes=row[4],
             buffer_minutes=row[5],
         )
+
+    def offered_slots(self, user_id: UUID, gmail_thread_id: str) -> tuple[Interval, ...]:
+        with self._engine.begin() as conn:
+            set_user_context(conn, user_id)
+            payload = conn.execute(
+                text(
+                    "SELECT a.payload FROM app.pending_actions AS a"
+                    " JOIN app.threads AS t ON t.user_id = a.user_id AND t.thread_id = a.thread_id"
+                    " WHERE a.user_id = :u AND t.gmail_thread_id = :g"
+                    " AND a.kind = 'reply_with_slots' AND a.status = 'executed'"
+                    " ORDER BY a.executed_at DESC LIMIT 1"
+                ),
+                {"u": user_id, "g": gmail_thread_id},
+            ).scalar_one_or_none()
+        if payload is None:
+            return ()
+        return tuple(Interval.model_validate_json(json.dumps(s)) for s in payload["slots"])
 
     def audit(self, user_id: UUID, action: str, details: dict[str, Any]) -> None:
         with self._engine.begin() as conn:

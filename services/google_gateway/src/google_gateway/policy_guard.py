@@ -70,6 +70,31 @@ def check_reply(g: GuardInput) -> GuardResult:
     return GuardResult(recipients=recipients, violations=tuple(violations))
 
 
+def check_event(
+    *,
+    slot: Interval,
+    context: AgentContext,
+    user_email: str,
+    participants: Sequence[str],
+    busy_now: Sequence[Interval],
+    actions_today: int,
+) -> GuardResult:
+    """UC-M2: an event at a slot we offered. Attendees from the thread only (T5)."""
+    violations: list[str] = []
+    attendees = tuple(sorted({p.lower() for p in participants} - {user_email.lower()}))
+    if not attendees:
+        violations.append("no_recipients")
+    if len(attendees) > MAX_RECIPIENTS:
+        violations.append("too_many_recipients")
+    if slot.start <= context.now:
+        violations.append("slot_out_of_range")
+    if any(_overlaps(slot, busy) for busy in busy_now):
+        violations.append("slot_not_free")  # E1
+    if actions_today >= MAX_ACTIONS_PER_DAY:
+        violations.append("daily_action_limit")  # T24
+    return GuardResult(recipients=attendees, violations=tuple(violations))
+
+
 def _check_slots(g: GuardInput) -> list[str]:
     found: list[str] = []
     slots = g.decision.slots

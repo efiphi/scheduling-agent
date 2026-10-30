@@ -31,10 +31,10 @@ from google_gateway.coordination import PollCoordination
 from google_gateway.email_template import build_reply
 from google_gateway.free_busy_responder import OpenCalendar
 from google_gateway.mail_store import MailStore
-from google_gateway.pending_action import content_hash, expires_at, reply_payload
-from google_gateway.policy_guard import GuardInput, check_reply
+from google_gateway.pending_action import content_hash, event_payload, expires_at, reply_payload
+from google_gateway.policy_guard import GuardInput, check_event, check_reply
 from google_gateway.token_crypto import EncryptedToken
-from shared.messages import AgentPlan, Interval, ProposeSlots
+from shared.messages import AgentPlan, ConfirmSlot, Interval, ProposeSlots
 from shared.streams import AGENT_PLANS
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,7 @@ GUARD_REJECTED_QUESTION = (
     "הסוכן הציע תשובה שלא עברה את בדיקות הבטיחות, ולכן היא לא הוצגה. כדאי להסתכל על המייל בעצמך."
 )
 CALENDAR_UNAVAILABLE_QUESTION = "לא הצלחתי לבדוק שוב את היומן לפני ההצעה. כדאי לענות בעצמך."
+SLOT_TAKEN_QUESTION = "הצד השני בחר מועד שכבר לא פנוי אצלך. כדאי להציע לו מועד אחר."
 
 
 @dataclass(frozen=True)
@@ -71,7 +72,70 @@ class PlanHandler:
                 plan.user_id, plan.thread_id, plan.task_id, decision.question
             )
             return "question" if created else "duplicate"
+        if decision.kind == "confirm_slot":
+            return self._confirm(plan, decision, record.subject)
         return self._propose(plan, decision, record.subject)
+
+    def _confirm(self, plan: AgentPlan, decision: ConfirmSlot, subject: str) -> str:
+        """UC-M2: the other side picked an offered slot. The time comes from our records."""
+        user, thread_id = plan.user_id, plan.thread_id
+        mailbox = self.mail.mailbox(user)
+        thread = self.actions.thread(user, thread_id)
+        offered = self.actions.offered_reply(user, thread_id)
+        if mailbox is None or thread is None:
+            return "rejected_not_connected"
+        if offered is None or decision.slot_index >= len(offered.slots):
+            # The agent pointed at a slot we never offered (T3).
+            self.mail.security_event(user, "confirm_slot_not_offered", {})
+            self.actions.create_question(user, thread_id, plan.task_id, GUARD_REJECTED_QUESTION)
+            return "rejected_by_guard"
+        slot = offered.slots[decision.slot_index]
+        context = self.mail.agent_context(user, self.clock())
+        busy = self._busy_now(user, mailbox.token, context.time_zone, (slot,))
+        if busy is None:
+            self.actions.create_question(
+                user, thread_id, plan.task_id, CALENDAR_UNAVAILABLE_QUESTION
+            )
+            return "question"
+        result = check_event(
+            slot=slot,
+            context=context,
+            user_email=mailbox.email,
+            participants=thread.participants,
+            busy_now=busy,
+            actions_today=self.actions.actions_since(user, self.clock() - timedelta(days=1)),
+        )
+        if not result.allowed:
+            self.mail.security_event(
+                user, "policy_guard_rejected", {"violations": list(result.violations)}
+            )
+            self.actions.create_question(
+                user,
+                thread_id,
+                plan.task_id,
+                SLOT_TAKEN_QUESTION
+                if "slot_not_free" in result.violations
+                else GUARD_REJECTED_QUESTION,
+            )
+            return "rejected_by_guard"
+        payload = event_payload(
+            slot=slot,
+            language=offered.language,
+            attendees=result.recipients,
+            incoming_subject=subject,
+            gmail_thread_id=thread.gmail_thread_id,
+            time_zone=context.time_zone,
+        )
+        action_id = self.actions.create_reply_action(
+            user,
+            thread_id,
+            plan.task_id,
+            payload,
+            content_hash(payload),
+            expires_at(context, self.actions.end_of_workday(user)),
+            kind="create_event",
+        )
+        return "pending_action" if action_id else "duplicate"
 
     def _propose(self, plan: AgentPlan, decision: ProposeSlots, subject: str) -> str:
         user, thread_id = plan.user_id, plan.thread_id

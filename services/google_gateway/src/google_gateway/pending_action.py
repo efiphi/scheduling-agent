@@ -16,7 +16,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from google_gateway.email_template import OutgoingEmail
-from shared.messages import AgentContext, ProposeSlots
+from shared.messages import AgentContext, Interval, ProposeSlots
 
 
 def reply_payload(
@@ -36,6 +36,39 @@ def reply_payload(
         "language": decision.language,
         "duration_minutes": decision.duration_minutes,
         "slots": [{"start": s.start.isoformat(), "end": s.end.isoformat()} for s in decision.slots],
+        "time_zone": time_zone,
+    }
+
+
+EVENT_TITLE = {"he": "פגישה: {subject}", "en": "Meeting: {subject}"}
+EVENT_DESCRIPTION = {
+    "he": "האירוע נוצר על ידי עוזר התיאום האוטומטי שלי, אחרי שאישרתי אותו.",
+    "en": "This event was created by my automated scheduling assistant, after I approved it.",
+}
+
+
+def event_payload(
+    *,
+    slot: Interval,
+    language: str,
+    attendees: tuple[str, ...],
+    incoming_subject: str,
+    gmail_thread_id: str,
+    time_zone: str,
+) -> dict[str, Any]:
+    """A calendar event with a Meet link (UC-M2). Title and description come from code."""
+    subject = " ".join(incoming_subject.split())  # untrusted: no line breaks, short
+    if subject.lower().startswith("re:"):
+        subject = subject[3:].strip()
+    return {
+        "kind": "create_event",
+        "gmail_thread_id": gmail_thread_id,
+        "to": list(attendees),
+        "subject": EVENT_TITLE[language].format(subject=subject[:100]),
+        "body": EVENT_DESCRIPTION[language],
+        "language": language,
+        "duration_minutes": int((slot.end - slot.start).total_seconds() // 60),
+        "slots": [{"start": slot.start.isoformat(), "end": slot.end.isoformat()}],
         "time_zone": time_zone,
     }
 

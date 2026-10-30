@@ -5,6 +5,7 @@ one transaction: either all of it is recorded, or none. A second plan for the sa
 hits the (user_id, task_id) unique constraint and creates nothing (E8).
 """
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, time
 from typing import Any, Protocol
@@ -16,6 +17,16 @@ from sqlalchemy.sql.expression import bindparam
 
 from db.session import set_user_context
 from google_gateway.events import write_audit
+from shared.messages import Interval
+
+
+@dataclass(frozen=True)
+class OfferedReply:
+    """What the last reply sent in a thread offered: the only times an event may use."""
+
+    slots: tuple[Interval, ...]
+    language: str
+    duration_minutes: int
 
 
 @dataclass(frozen=True)
@@ -27,6 +38,8 @@ class ThreadInfo:
 
 class ActionStore(Protocol):
     def thread(self, user_id: UUID, thread_id: UUID) -> ThreadInfo | None: ...
+
+    def offered_reply(self, user_id: UUID, thread_id: UUID) -> OfferedReply | None: ...
 
     def end_of_workday(self, user_id: UUID) -> time: ...
 
@@ -42,6 +55,7 @@ class ActionStore(Protocol):
         payload: dict[str, Any],
         content_hash: str,
         expires_at: datetime,
+        kind: str = "reply_with_slots",
     ) -> UUID | None:
         """The new action's id, or None if this task already has one."""
         ...
@@ -56,7 +70,7 @@ class ActionStore(Protocol):
 _INSERT_ACTION = text(
     "INSERT INTO app.pending_actions"
     " (user_id, thread_id, task_id, kind, payload, content_hash, expires_at)"
-    " VALUES (:user_id, :thread_id, :task_id, 'reply_with_slots', :payload, :hash, :expires)"
+    " VALUES (:user_id, :thread_id, :task_id, :kind, :payload, :hash, :expires)"
     " ON CONFLICT (user_id, task_id) DO NOTHING RETURNING action_id"
 ).bindparams(bindparam("payload", type_=JSONB))
 
@@ -76,6 +90,25 @@ class SqlActionStore:
                 {"u": user_id, "t": thread_id},
             ).one_or_none()
         return None if row is None else ThreadInfo(row[0], tuple(row[1]), row[2])
+
+    def offered_reply(self, user_id: UUID, thread_id: UUID) -> OfferedReply | None:
+        with self._engine.begin() as conn:
+            set_user_context(conn, user_id)
+            payload = conn.execute(
+                text(
+                    "SELECT payload FROM app.pending_actions"
+                    " WHERE user_id = :u AND thread_id = :t AND kind = 'reply_with_slots'"
+                    " AND status = 'executed' ORDER BY executed_at DESC LIMIT 1"
+                ),
+                {"u": user_id, "t": thread_id},
+            ).scalar_one_or_none()
+        if payload is None:
+            return None
+        return OfferedReply(
+            slots=tuple(Interval.model_validate_json(json.dumps(s)) for s in payload["slots"]),
+            language=str(payload["language"]),
+            duration_minutes=int(payload["duration_minutes"]),
+        )
 
     def end_of_workday(self, user_id: UUID) -> time:
         with self._engine.begin() as conn:
@@ -108,6 +141,7 @@ class SqlActionStore:
         payload: dict[str, Any],
         content_hash: str,
         expires_at: datetime,
+        kind: str = "reply_with_slots",
     ) -> UUID | None:
         with self._engine.begin() as conn:
             set_user_context(conn, user_id)
@@ -120,6 +154,7 @@ class SqlActionStore:
                     "payload": payload,
                     "hash": content_hash,
                     "expires": expires_at,
+                    "kind": kind,
                 },
             ).scalar_one_or_none()
             if action_id is None:

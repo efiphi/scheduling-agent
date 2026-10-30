@@ -61,6 +61,12 @@ class ExtractionForm(BaseModel):
             " exactly as written (even if it does not match the date). Otherwise null."
         )
     )
+    chosen_option: int | None = Field(
+        description=(
+            "Only if the email answers the times we offered (listed under 'Times we offered')"
+            " and clearly picks one: its number, 1 to 3. Otherwise null."
+        )
+    )
     unclear: bool = Field(
         description="True if the request is too ambiguous to propose times without guessing."
     )
@@ -91,12 +97,19 @@ class NotAMeeting:
 
 
 @dataclass(frozen=True)
+class SlotChosen:
+    """The other side picked offered slot number `index` (0-based) (UC-M2)."""
+
+    index: int
+
+
+@dataclass(frozen=True)
 class Unclear:
     question: str
     reason: str  # for logs and evals: refusal, invalid_form, model_unclear, bad_dates...
 
 
-Extraction = MeetingRequest | NotAMeeting | Unclear
+Extraction = MeetingRequest | SlotChosen | NotAMeeting | Unclear
 
 
 @dataclass(frozen=True)
@@ -177,6 +190,9 @@ same day, copy the weekday as written, even if it does not match the date.
 - Set unclear to true, with a short question in Hebrew, only when you cannot fill the form \
 without guessing: for example a date that depends on an event you cannot place ("after the \
 holiday"), or contradictory times.
+- chosen_option: when "Times we offered" are listed and the sender clearly accepts one \
+of them ("Tuesday works", "האפשרות השנייה מתאימה"), give its number. If they accept a time \
+that is not on the list, or several, leave it null and set unclear.
 - opening_line: one short, warm sentence in the email's language that starts a reply \
 offering times. Do not include times, dates, names, links, email addresses or promises.
 """
@@ -188,8 +204,17 @@ def build_user_message(email: UntrustedEmail, context: AgentContext) -> str:
     # it cannot "close" the block early.
     body = _neutralise_tags(email.body_text)
     subject = _neutralise_tags(email.subject)
+    offered = ""
+    if context.proposed_slots:
+        tz = ZoneInfo(context.time_zone)
+        lines = [
+            f"{i}. {s.start.astimezone(tz):%A %Y-%m-%d %H:%M}-{s.end.astimezone(tz):%H:%M}"
+            for i, s in enumerate(context.proposed_slots, start=1)
+        ]
+        offered = "Times we offered in this thread:\n" + "\n".join(lines) + "\n\n"
     return (
         f"Today is {now:%A %Y-%m-%d}, {now:%H:%M} in {context.time_zone}.\n\n"
+        f"{offered}"
         "<untrusted_email>\n"
         f"From: {email.sender}\n"
         f"Subject: {subject}\n\n"
@@ -224,6 +249,11 @@ def interpret(answer: ModelAnswer, context: AgentContext) -> Extraction:
     if answer.stop_reason == "refusal":
         return _unclear("refusal")
     if form is None or answer.stop_reason not in ("end_turn", "stop_sequence"):
+        return _unclear("invalid_form")
+    # A pick from the offered list comes first: "Tuesday works" may not read as a request.
+    if form.chosen_option is not None and context.proposed_slots:
+        if 1 <= form.chosen_option <= len(context.proposed_slots):
+            return SlotChosen(form.chosen_option - 1)
         return _unclear("invalid_form")
     if not form.is_meeting_request:
         return NotAMeeting()
@@ -293,6 +323,7 @@ __all__ = [
     "MeetingRequest",
     "ModelAnswer",
     "NotAMeeting",
+    "SlotChosen",
     "Unclear",
     "Usage",
     "extract",

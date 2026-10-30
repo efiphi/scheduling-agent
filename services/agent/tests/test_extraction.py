@@ -40,6 +40,7 @@ def form(**changes: Any) -> ExtractionForm:
         "latest_date": date(2026, 11, 5),
         "time_of_day": "morning",
         "stated_weekday": None,
+        "chosen_option": None,
         "unclear": False,
         "question_for_user": None,
         "opening_line": "Thanks, here are a few times that work.",
@@ -195,3 +196,38 @@ def test_a_weekday_that_matches_its_date_passes() -> None:
         earliest_date=date(2026, 11, 3), latest_date=date(2026, 11, 3), stated_weekday="tuesday"
     )
     assert isinstance(interpret(answer(match), CONTEXT), MeetingRequest)
+
+
+def offered_context() -> AgentContext:
+    from shared.messages import Interval
+
+    slots = tuple(
+        Interval(
+            start=datetime(2026, 11, 3, h, tzinfo=UTC), end=datetime(2026, 11, 3, h, 30, tzinfo=UTC)
+        )
+        for h in (8, 10)
+    )
+    return CONTEXT.model_copy(update={"proposed_slots": slots})
+
+
+def test_uc_m2_picking_an_offered_slot_returns_only_its_number() -> None:
+    from agent.extraction import SlotChosen
+
+    picked = form(is_meeting_request=False, chosen_option=2)
+    assert interpret(answer(picked), offered_context()) == SlotChosen(1)
+
+
+def test_t3_a_number_outside_the_offered_list_is_not_trusted() -> None:
+    result = interpret(answer(form(chosen_option=3)), offered_context())
+    assert isinstance(result, Unclear)
+
+
+def test_a_chosen_option_without_offered_slots_is_ignored() -> None:
+    # No proposal was sent in this thread: the field means nothing.
+    assert isinstance(interpret(answer(form(chosen_option=1)), CONTEXT), MeetingRequest)
+
+
+def test_the_prompt_lists_the_offered_times_in_local_time() -> None:
+    message = build_user_message(email("Tuesday works"), offered_context())
+    assert "1. Tuesday 2026-11-03 10:00-10:30" in message
+    assert "2. Tuesday 2026-11-03 12:00-12:30" in message

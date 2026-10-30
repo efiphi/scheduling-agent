@@ -89,3 +89,27 @@ def test_settings_and_closing(gateway: Engine, user_thread: tuple[UUID, UUID]) -
     store.close_thread(user, thread, "not_a_meeting_request")
     assert store.thread(user, thread).state == "closed"  # type: ignore[union-attr]
     assert store.replies_sent_in_thread(user, thread) == 0
+
+
+def test_uc_m2_offered_slots_come_from_the_reply_actually_sent(
+    gateway: Engine, owner: Engine, user_thread: tuple[UUID, UUID]
+) -> None:
+    user, thread = user_thread
+    store = SqlActionStore(gateway)
+    slots = [{"start": "2026-11-03T10:00:00+02:00", "end": "2026-11-03T10:30:00+02:00"}]
+    payload = {**PAYLOAD, "slots": slots, "language": "he", "duration_minutes": 30}
+    action = store.create_reply_action(user, thread, uuid4(), payload, "sha256:x", EXPIRES)
+    # Not sent yet: nothing counts as offered.
+    assert store.offered_reply(user, thread) is None
+    assert SqlMailStore(gateway).offered_slots(user, "g-thread") == ()
+    with owner.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE app.pending_actions SET status = 'executed', executed_at = now()"
+                " WHERE action_id = :a"
+            ),
+            {"a": action},
+        )
+    offered = store.offered_reply(user, thread)
+    assert offered is not None and offered.language == "he" and len(offered.slots) == 1
+    assert len(SqlMailStore(gateway).offered_slots(user, "g-thread")) == 1

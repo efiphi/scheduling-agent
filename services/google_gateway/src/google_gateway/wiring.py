@@ -13,8 +13,10 @@ from google_gateway.config import GatewayConfig
 from google_gateway.connection import ConnectFlow
 from google_gateway.coordination import RedisCoordination
 from google_gateway.credentials_store import SqlCredentialRepository
+from google_gateway.executor import Executor, SqlExecutionStore, redis_user_lock
 from google_gateway.free_busy_responder import FreeBusyResponder, OpenCalendar
 from google_gateway.gmail import GmailReader, GoogleGmailReader
+from google_gateway.gmail_sender import GoogleMailSender, MailSender
 from google_gateway.google_oauth import FlowOAuthClient
 from google_gateway.mail_store import SqlMailStore
 from google_gateway.oauth_state import RedisStateStore
@@ -99,4 +101,21 @@ def plan_handler(config: GatewayConfig) -> PlanHandler:
         coordination=RedisCoordination(redis_client(config)),
         open_calendar=_calendar_opener(config),
         clock=lambda: datetime.now(UTC),
+    )
+
+
+def executor(config: GatewayConfig) -> Executor:
+    cipher = TokenCipher.from_env()
+    google = google_client(config)
+    engine = gateway_engine(config)
+
+    def open_sender(user_id: UUID, token: EncryptedToken) -> MailSender:
+        return GoogleMailSender(google.credentials(cipher.decrypt(token, user_id)))
+
+    return Executor(
+        store=SqlExecutionStore(engine),
+        mail=SqlMailStore(engine),
+        open_calendar=_calendar_opener(config),
+        open_sender=open_sender,
+        lock=redis_user_lock(redis_client(config)),
     )

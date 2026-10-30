@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Account } from "../domain/account";
@@ -80,7 +80,7 @@ describe("action card states", () => {
 
 describe("real-time queue", () => {
   it("removes a card approved on WhatsApp and says so", async () => {
-    let push: (e: QueueEvent) => void = () => {};
+    let push: ((e: QueueEvent) => void) | undefined;
     const source = sourceWith([makeAction({ id: "a" }), makeAction({ id: "b", kind: "block_time" })], {
       subscribeToQueue: (onEvent) => {
         push = onEvent;
@@ -89,15 +89,16 @@ describe("real-time queue", () => {
     });
     renderApp("/", source);
     expect(await screen.findAllByRole("article")).toHaveLength(2);
+    await waitFor(() => expect(push).toBeDefined());
 
-    act(() => push({ type: "decided", id: "a", decision: "approved", channel: "whatsapp" }));
+    act(() => push?.({ type: "decided", id: "a", decision: "approved", channel: "whatsapp" }));
 
     expect(screen.getAllByRole("article")).toHaveLength(1);
     expect(screen.getByRole("status")).toHaveTextContent("אושר בווטסאפ");
   });
 
   it("locks a card that expires while it is open", async () => {
-    let push: (e: QueueEvent) => void = () => {};
+    let push: ((e: QueueEvent) => void) | undefined;
     const source = sourceWith([makeAction({ id: "a" })], {
       subscribeToQueue: (onEvent) => {
         push = onEvent;
@@ -106,8 +107,11 @@ describe("real-time queue", () => {
     });
     renderApp("/", source);
     await screen.findByRole("button", { name: "אשר" });
+    // The page subscribes in an effect, which can run after the button is on screen. On a
+    // slow machine (CI) an event sent before that would be lost, so wait for it.
+    await waitFor(() => expect(push).toBeDefined());
 
-    act(() => push({ type: "expired", id: "a" }));
+    act(() => push?.({ type: "expired", id: "a" }));
 
     expect(screen.getByText("הפעולה פגה. אפשר להחזיר אותה לתור.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "אשר" })).not.toBeInTheDocument();

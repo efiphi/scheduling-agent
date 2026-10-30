@@ -64,7 +64,7 @@ select = [
 allowed-confusables = ["ו", "ן", "ס", "י", "׳"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["agent", "api", "db", "evals", "google_gateway", "shared"]
+known-first-party = ["agent", "api", "db", "evals", "google_gateway", "redteam", "shared"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests use plain assert by design.
@@ -87,6 +87,7 @@ files = [
   "services/agent/src",
   "services/agent/tests",
   "evals",
+  "redteam",
   "tests",
 ]
 

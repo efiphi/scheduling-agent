@@ -58,6 +58,7 @@ deploy/compose/           Local stack: Postgres, Redis, api, google-gateway, gma
                           calendar-responder, agent;
                           database roles and their tests
 evals/                    Synthetic emails that score the agent's understanding (run by hand)
+redteam/                  Attack emails from the threat model, run through the real pipeline
 docs/                  Design docs (Hebrew): use cases, threat model, architecture, web app
 docs/adr/              Architecture decision records (English)
 .github/workflows/     CI

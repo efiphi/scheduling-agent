@@ -11,13 +11,14 @@ from mail_fakes import NOW, FakeCoordination, FakeMailStore
 from test_calendar import event
 from test_free_busy_responder import FakeCalendar
 
-from google_gateway.actions_store import ThreadInfo
+from google_gateway.actions_store import OfferedReply, ThreadInfo
 from google_gateway.calendar import CalendarEvent
 from google_gateway.plan_handler import GUARD_REJECTED_QUESTION, PlanHandler
 from google_gateway.token_crypto import EncryptedToken
 from shared.messages import (
     AgentPlan,
     AskUser,
+    ConfirmSlot,
     EmailTask,
     Interval,
     NotAMeetingRequest,
@@ -38,9 +39,13 @@ class FakeActionStore:
     questions: dict[tuple[UUID, UUID], str] = field(default_factory=dict)
     closed: list[UUID] = field(default_factory=list)
     sent_in_thread: int = 0
+    offered: OfferedReply | None = None
 
     def thread(self, user_id: UUID, thread_id: UUID) -> ThreadInfo | None:
         return self.threads.get((user_id, thread_id))
+
+    def offered_reply(self, user_id: UUID, thread_id: UUID) -> OfferedReply | None:
+        return self.offered
 
     def end_of_workday(self, user_id: UUID) -> time:
         return time(18)
@@ -59,6 +64,7 @@ class FakeActionStore:
         payload: dict[str, Any],
         content_hash: str,
         expires_at: datetime,
+        kind: str = "reply_with_slots",
     ) -> UUID | None:
         if (user_id, task_id) in self.actions:
             return None
@@ -199,3 +205,47 @@ def test_not_a_request_closes_the_thread() -> None:
     s = make()
     assert s.handler.handle(plan(s, NotAMeetingRequest(kind="not_a_meeting_request"))) == "closed"
     assert s.actions.closed == [s.thread]
+
+
+def offered(s: Setup) -> OfferedReply:
+    reply = OfferedReply(slots=(slot(3, 10), slot(4, 10)), language="he", duration_minutes=30)
+    s.actions.offered = reply
+    return reply
+
+
+def test_uc_m2_a_picked_slot_becomes_an_event_at_the_offered_time() -> None:
+    s = make()
+    offered(s)
+    result = s.handler.handle(plan(s, ConfirmSlot(kind="confirm_slot", slot_index=1)))
+    assert result == "pending_action"
+    payload, _, _ = s.actions.actions[(s.user, s.task)]
+    assert payload["kind"] == "create_event"
+    # The time is the one we offered as option 2, taken from our records.
+    assert payload["slots"] == [
+        {"start": slot(4, 10).start.isoformat(), "end": slot(4, 10).end.isoformat()}
+    ]
+    assert payload["to"] == ["dana@example.org"]
+    assert payload["subject"] == "פגישה: Quick call?"
+    assert "עוזר התיאום האוטומטי" in payload["body"]
+
+
+def test_t3_a_slot_number_we_never_offered_is_refused() -> None:
+    s = make()
+    offered(s)
+    result = s.handler.handle(plan(s, ConfirmSlot(kind="confirm_slot", slot_index=2)))
+    assert result == "rejected_by_guard" and s.actions.actions == {}
+    assert any(kind == "confirm_slot_not_offered" for _, kind in s.mail.security_events)
+
+
+def test_t3_confirming_without_any_offer_is_refused() -> None:
+    s = make()
+    result = s.handler.handle(plan(s, ConfirmSlot(kind="confirm_slot", slot_index=0)))
+    assert result == "rejected_by_guard"
+
+
+def test_e1_a_picked_slot_that_is_now_busy_asks_the_user() -> None:
+    s = make([event(10, 11)])
+    offered(s)
+    result = s.handler.handle(plan(s, ConfirmSlot(kind="confirm_slot", slot_index=0)))
+    assert result == "rejected_by_guard" and s.actions.actions == {}
+    assert "כבר לא פנוי" in s.actions.questions[(s.user, s.task)]

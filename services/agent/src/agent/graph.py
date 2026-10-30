@@ -1,6 +1,6 @@
 """The agent's flow as a LangGraph state graph (ADR-002). One email in, one plan out.
 
-    extract --(not a request / unclear)--------------------------> plan
+    extract --(not a request / unclear / picked an offered slot)--> plan
        |
        +--(meeting request)--> free_busy --> choose_slots ---------> plan
 
@@ -26,6 +26,7 @@ from agent.extraction import (
     FormFiller,
     MeetingRequest,
     NotAMeeting,
+    SlotChosen,
     Unclear,
     Usage,
     extract,
@@ -35,6 +36,7 @@ from agent.slots import pick_slots, search_window
 from shared.messages import (
     AgentPlan,
     AskUser,
+    ConfirmSlot,
     EmailTask,
     FreeBusyRequest,
     Interval,
@@ -125,6 +127,9 @@ def decide(state: AgentState) -> PlanDecision:
     extraction = state["extraction"]
     if isinstance(extraction, NotAMeeting):
         return NotAMeetingRequest(kind="not_a_meeting_request")
+    if isinstance(extraction, SlotChosen):
+        # Only the number goes back; the gateway looks up the time itself (T3).
+        return ConfirmSlot(kind="confirm_slot", slot_index=extraction.index)
     if isinstance(extraction, Unclear):
         return AskUser(kind="ask_user", question=extraction.question)
     if not state.get("calendar_ok"):

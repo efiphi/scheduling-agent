@@ -152,13 +152,18 @@ class MailboxPoller:
         thread_id = self.store.upsert_thread(
             user_id, meta.thread_id, _participants(meta, user_email)
         )
+        context = self.store.agent_context(user_id, self.clock())
+        offered = self.store.offered_slots(user_id, meta.thread_id)
+        if offered:
+            # A reply to our proposal: the agent may pick one of these by number (UC-M2).
+            context = context.model_copy(update={"proposed_slots": offered})
         self.coordination.enqueue(
             EmailTask(
                 task_id=uuid4(),
                 user_id=user_id,
                 thread_id=thread_id,
                 email=email,
-                context=self.store.agent_context(user_id, self.clock()),
+                context=context,
             )
         )
         return decision.reason.value

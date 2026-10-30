@@ -13,7 +13,8 @@ Redis so two approvals cannot race each other (E1):
 4. Every slot is still free on a fresh calendar read (E1).
 5. The action is claimed ("executing") and the approval marked used, in one transaction.
 6. Gmail is asked whether a message with this action's Message-ID already exists; only if
-   not is the email sent (E8). Then the action is "executed".
+   not is the email sent (E8). An event (UC-M2) is created with an id derived from the
+   action, so a repeat finds the same event. Then the action is "executed".
 Any failed check marks the action "failed" with a reason code, and the user gets a
 question instead of a silent failure (E13). An action found "executing" after a crash is
 never re-sent blindly: if Gmail has it, it is "executed", otherwise "failed".
@@ -34,6 +35,7 @@ from sqlalchemy import Engine, text
 
 from db.session import set_user_context
 from google_gateway.calendar import busy_intervals
+from google_gateway.calendar_writer import CalendarWriter
 from google_gateway.events import write_audit, write_security_event
 from google_gateway.free_busy_responder import OpenCalendar
 from google_gateway.gmail_sender import MailSender, build_message
@@ -85,6 +87,7 @@ class ExecutionStore(Protocol):
 
 
 OpenSender = Callable[[UUID, EncryptedToken], MailSender]
+OpenWriter = Callable[[UUID, EncryptedToken], CalendarWriter]
 UserLock = Callable[[UUID], AbstractContextManager[bool]]
 
 
@@ -94,6 +97,7 @@ class Executor:
     mail: MailStore
     open_calendar: OpenCalendar
     open_sender: OpenSender
+    open_writer: OpenWriter
     lock: UserLock
 
     def execute(self, user_id: UUID, action_id: UUID) -> str:
@@ -129,15 +133,20 @@ class Executor:
                 return self._fail(user_id, action_id, action, "slot_taken")
             if not self.store.claim(user_id, action_id):
                 return "already_claimed"
-            sender = self.open_sender(user_id, mailbox.token)
-            gmail_id = sender.already_sent(action.idempotency_key) or self._send(sender, action)
+            if action.payload.get("kind") == "create_event":
+                # UC-M2: idempotent by design: a repeat finds the same event (E8).
+                writer = self.open_writer(user_id, mailbox.token)
+                done_id = writer.create_event(action.idempotency_key, action.payload)
+            else:
+                sender = self.open_sender(user_id, mailbox.token)
+                done_id = sender.already_sent(action.idempotency_key) or self._send(sender, action)
         except RefreshError:
             self.mail.mark_expired(user_id)
             return self._fail(user_id, action_id, action, "token_rejected")
         except Exception as exc:
             logger.error("execution failed: action_id=%s error=%s", action_id, type(exc).__name__)
             return self._fail(user_id, action_id, action, "send_error")
-        self.store.executed(user_id, action_id, gmail_id)
+        self.store.executed(user_id, action_id, done_id)
         return "executed"
 
     def _send(self, sender: MailSender, action: Approved) -> str:
@@ -153,6 +162,16 @@ class Executor:
 
     def _recover(self, user_id: UUID, action_id: UUID, action: Approved, mailbox: Any) -> str:
         # A previous run claimed it and stopped. Never send blindly: ask Gmail first.
+        if mailbox is not None and action.payload.get("kind") == "create_event":
+            try:
+                # Safe to repeat: the event id is fixed, so this finds or creates the one event.
+                done = self.open_writer(user_id, mailbox.token).create_event(
+                    action.idempotency_key, action.payload
+                )
+            except Exception:
+                return self._fail(user_id, action_id, action, "interrupted")
+            self.store.executed(user_id, action_id, done)
+            return "executed"
         if mailbox is not None:
             try:
                 sent = self.open_sender(user_id, mailbox.token).already_sent(action.idempotency_key)
@@ -257,13 +276,24 @@ class SqlExecutionStore:
     def executed(self, user_id: UUID, action_id: UUID, gmail_message_id: str) -> None:
         with self._engine.begin() as conn:
             set_user_context(conn, user_id)
-            conn.execute(
+            kind = conn.execute(
                 text(
                     "UPDATE app.pending_actions SET status = 'executed', executed_at = now()"
-                    " WHERE user_id = :u AND action_id = :a"
+                    " WHERE user_id = :u AND action_id = :a RETURNING kind"
                 ),
                 {"u": user_id, "a": action_id},
-            )
+            ).scalar_one()
+            if kind == "create_event":
+                # The meeting is set: the thread is done coordinating (UC-M2).
+                conn.execute(
+                    text(
+                        "UPDATE app.threads SET state = 'scheduled', updated_at = now()"
+                        " WHERE user_id = :u AND thread_id ="
+                        " (SELECT thread_id FROM app.pending_actions"
+                        " WHERE user_id = :u AND action_id = :a)"
+                    ),
+                    {"u": user_id, "a": action_id},
+                )
             write_audit(
                 conn,
                 user_id,

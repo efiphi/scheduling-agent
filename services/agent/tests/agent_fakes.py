@@ -58,6 +58,7 @@ def form(**changes: Any) -> ExtractionForm:
         "latest_date": date(2026, 11, 5),
         "time_of_day": "any",
         "stated_weekday": None,
+        "chosen_option": None,
         "unclear": False,
         "question_for_user": None,
         "opening_line": "Thanks, here are a few times that work.",

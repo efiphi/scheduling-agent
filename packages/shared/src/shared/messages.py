@@ -74,6 +74,9 @@ class AgentContext(StrictModel):
     work_end: time
     default_duration_minutes: int = Field(ge=5, le=480)
     buffer_minutes: int = Field(ge=0, le=120)
+    # The slots this thread's last reply offered, if any (UC-M2). The agent may only point
+    # at one of them by number; the gateway takes the time itself from its own records.
+    proposed_slots: tuple[Interval, ...] = Field(default=(), max_length=3)
 
 
 class EmailTask(StrictModel):
@@ -135,13 +138,26 @@ class AskUser(StrictModel):
     question: Annotated[str, StringConstraints(min_length=1, max_length=300)]
 
 
+class ConfirmSlot(StrictModel):
+    """The other side picked one of the offered slots (UC-M2): create the event.
+
+    Only an index: the time comes from the gateway's record of what was offered, so a
+    manipulated model cannot book a time nobody offered (T3).
+    """
+
+    kind: Literal["confirm_slot"]
+    slot_index: int = Field(ge=0, le=2)
+
+
 class NotAMeetingRequest(StrictModel):
     """The filter let it through, but it is not a scheduling request (E9)."""
 
     kind: Literal["not_a_meeting_request"]
 
 
-PlanDecision = Annotated[ProposeSlots | AskUser | NotAMeetingRequest, Field(discriminator="kind")]
+PlanDecision = Annotated[
+    ProposeSlots | ConfirmSlot | AskUser | NotAMeetingRequest, Field(discriminator="kind")
+]
 
 
 class AgentPlan(StrictModel):
@@ -158,6 +174,7 @@ __all__ = [
     "AgentContext",
     "AgentPlan",
     "AskUser",
+    "ConfirmSlot",
     "EmailTask",
     "FreeBusyReply",
     "FreeBusyRequest",

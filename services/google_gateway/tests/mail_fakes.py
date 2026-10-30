@@ -11,7 +11,7 @@ from google_gateway.coordination import TaskRecord
 from google_gateway.gmail import HistoryExpired, MessageMeta, MessageRef
 from google_gateway.mail_store import Mailbox
 from google_gateway.token_crypto import EncryptedToken
-from shared.messages import AgentContext, EmailTask
+from shared.messages import AgentContext, EmailTask, Interval
 
 USER_EMAIL = "demo-user@example.com"
 NOW = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
@@ -93,6 +93,7 @@ class FakeMailStore:
     expired: set[UUID] = field(default_factory=set)
     audits: list[tuple[UUID, str, dict[str, Any]]] = field(default_factory=list)
     security_events: list[tuple[UUID, str]] = field(default_factory=list)
+    offered: dict[tuple[UUID, str], tuple[Interval, ...]] = field(default_factory=dict)
 
     def add_user(self, history_id: str | None = "100") -> UUID:
         user_id = uuid4()
@@ -136,6 +137,9 @@ class FakeMailStore:
             default_duration_minutes=30,
             buffer_minutes=15,
         )
+
+    def offered_slots(self, user_id: UUID, gmail_thread_id: str) -> tuple[Interval, ...]:
+        return self.offered.get((user_id, gmail_thread_id), ())
 
     def audit(self, user_id: UUID, action: str, details: dict[str, Any]) -> None:
         self.audits.append((user_id, action, details))

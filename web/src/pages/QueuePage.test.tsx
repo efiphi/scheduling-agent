@@ -1,5 +1,6 @@
 import { screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 
 import { notConnectedSource } from "../data/source";
 import { makeAction, sourceWith } from "../test/fixtures";
@@ -24,10 +25,36 @@ describe("approval queue", () => {
     expect(titles).toEqual(["חסימת זמן ביומן", "ביטול פגישה"]);
   });
 
-  it("does not wire approve/edit/reject before the API exists", async () => {
-    renderApp("/", sourceWith([makeAction()]));
-    for (const name of ["אשר", "ערוך", "דחה"]) {
-      expect(await screen.findByRole("button", { name })).toBeDisabled();
-    }
+  it("approves exactly what was shown: the card's content hash goes to the server", async () => {
+    const approve = vi.fn().mockResolvedValue({ ok: true });
+    renderApp("/", sourceWith([makeAction({ id: "a", contentHash: "sha256:shown" })], { approve }));
+    await userEvent.click(await screen.findByRole("button", { name: "אשר" }));
+    expect(approve).toHaveBeenCalledWith("a", "sha256:shown");
+    expect(await screen.findByText("אין כרגע פעולות שמחכות לך.")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("אושר באפליקציה");
+  });
+
+  it("keeps the card and explains when the content changed (T3)", async () => {
+    const approve = vi.fn().mockResolvedValue({ ok: false, reason: "hash_mismatch" });
+    renderApp("/", sourceWith([makeAction()], { approve }));
+    await userEvent.click(await screen.findByRole("button", { name: "אשר" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("התוכן השתנה");
+    expect(screen.getByRole("article")).toBeInTheDocument();
+  });
+
+  it("rejects, and edit is not available in the MVP", async () => {
+    const reject = vi.fn().mockResolvedValue({ ok: true });
+    renderApp("/", sourceWith([makeAction({ id: "r" })], { reject }));
+    expect(await screen.findByRole("button", { name: "ערוך" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "דחה" }));
+    expect(reject).toHaveBeenCalledWith("r");
+  });
+
+  it("shows the agent's questions as plain text (UC-M7, T19)", async () => {
+    const listQuestions = () =>
+      Promise.resolve([{ id: "q", question: "<img src=x onerror=alert(1)> מתי?", createdAt: "2026-11-02T08:00:00Z" }]);
+    const { container } = renderApp("/", sourceWith([], { listQuestions }));
+    expect(await screen.findByText("<img src=x onerror=alert(1)> מתי?")).toBeInTheDocument();
+    expect(container.querySelector("img")).toBeNull();
   });
 });

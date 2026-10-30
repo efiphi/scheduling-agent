@@ -2,6 +2,15 @@ import type { Account, Contact, DailySummary, HistoryEntry, ManagedUser, Setting
 import type { PendingAction } from "../domain/actions";
 import type { QueueEvent } from "../domain/queue";
 
+/** A question from the agent when it could not decide (UC-M7). Untrusted text: plain only. */
+export interface AgentQuestion {
+  id: string;
+  question: string;
+  createdAt: string;
+}
+
+export type DecisionResult = { ok: true } | { ok: false; reason: string };
+
 /**
  * Everything the UI reads goes through this interface. Screens never fetch directly,
  * so connecting the real API in Layer 1 means replacing one implementation.
@@ -15,7 +24,12 @@ export interface DataSource {
   getAccount(): Promise<Account | null>;
   getSummary(): Promise<DailySummary | null>;
   listUsers(): Promise<ManagedUser[]>;
-  /** Real-time queue changes (Server-Sent Events in Layer 1). Returns an unsubscribe function. */
+  listQuestions(): Promise<AgentQuestion[]>;
+  /** Approve exactly what was shown: the hash binds the approval to that content (T3, T10). */
+  approve(id: string, contentHash: string): Promise<DecisionResult>;
+  reject(id: string): Promise<DecisionResult>;
+  dismissQuestion(id: string): Promise<DecisionResult>;
+  /** Queue changes made elsewhere (WhatsApp, expiry). Returns an unsubscribe function. */
   subscribeToQueue(onEvent: (event: QueueEvent) => void): () => void;
 }
 
@@ -29,5 +43,9 @@ export const notConnectedSource: DataSource = {
   getAccount: () => Promise.resolve(null),
   getSummary: () => Promise.resolve(null),
   listUsers: () => Promise.resolve([]),
+  listQuestions: () => Promise.resolve([]),
+  approve: () => Promise.resolve({ ok: false, reason: "not_connected" }),
+  reject: () => Promise.resolve({ ok: false, reason: "not_connected" }),
+  dismissQuestion: () => Promise.resolve({ ok: false, reason: "not_connected" }),
   subscribeToQueue: () => () => {},
 };

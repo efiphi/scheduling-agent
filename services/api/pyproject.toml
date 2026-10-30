@@ -3,11 +3,13 @@ name = "api"
 version = "0.0.0"
 description = "Entry point: web app API, WhatsApp webhooks, Google login (identity only), approvals."
 requires-python = ">=3.12"
-# Only what this service needs. In particular: no Google client libraries here —
-# api never holds Google tokens (invariant 1, ADR-006, ADR-010).
-dependencies = ["fastapi", "shared", "uvicorn"]
+# Only what this service needs. No Google API clients and no OAuth client library: api
+# never holds Google tokens (invariant 1, ADR-006, ADR-010). google-auth is here only to
+# verify the signature of the login id_token; the code exchange is a plain HTTPS call.
+dependencies = ["db", "fastapi", "google-auth", "httpx2", "redis", "shared", "uvicorn"]
 
 [tool.uv.sources]
+db = { workspace = true }
 shared = { workspace = true }
 
 [build-system]

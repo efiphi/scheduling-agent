@@ -121,6 +121,7 @@ jobs:
           OWNER_DB_PASSWORD: ci-placeholder
           API_DB_PASSWORD: ci-placeholder
           GATEWAY_DB_PASSWORD: ci-placeholder
+          GOOGLE_LOGIN_CLIENT_ID: ci-placeholder
           GOOGLE_CONNECT_CLIENT_ID: ci-placeholder
           GOOGLE_CONNECT_CLIENT_SECRET: ci-placeholder
           TOKEN_ENCRYPTION_KEYS: ci-placeholder

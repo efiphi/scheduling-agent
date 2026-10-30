@@ -96,6 +96,16 @@ services:
     tmpfs: [/tmp]
     restart: unless-stopped
     networks: [data, queue]
+    # The api's own database role, Redis (sessions, the approved-actions stream) and the
+    # login client, which asks Google for identity only. No Google token ever (invariant 1).
+    environment:
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?set API_DB_PASSWORD in deploy/compose/.env}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in deploy/compose/.env}
+      GOOGLE_LOGIN_CLIENT_ID: ${GOOGLE_LOGIN_CLIENT_ID:-}
+      GOOGLE_LOGIN_CLIENT_SECRET: ${GOOGLE_LOGIN_CLIENT_SECRET:-}
+      WEB_APP_URL: ${WEB_APP_URL:-http://localhost:5173/}
     ports: ["127.0.0.1:8000:8000"]
     depends_on:
       postgres: { condition: service_healthy }

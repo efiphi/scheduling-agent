@@ -19,7 +19,7 @@ WORKDIR /app
 # as long as the dependencies do not change.
 COPY pyproject.toml uv.lock ./
 # Every workspace member's pyproject.toml is needed for uv to read the workspace, even the
-# ones the api image does not install (e.g. packages/db). Only api and shared get installed.
+# ones the api image does not install. api, db and shared get installed.
 COPY packages/db/pyproject.toml packages/db/
 COPY packages/shared/pyproject.toml packages/shared/
 COPY services/agent/pyproject.toml services/agent/
@@ -31,6 +31,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Then our own code. --no-editable installs it into the venv as a normal package,
 # so the final image does not need the source tree.
 COPY packages/shared packages/shared
+COPY packages/db/src packages/db/src
 COPY services/api services/api
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --package api --no-editable
@@ -55,4 +56,6 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # 0.0.0.0 inside the container; what is reachable from outside is decided by
 # Compose / Kubernetes port mapping, not here.
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]
+# --factory: the app is built from the environment at start. --no-access-log: the login
+# callback URL carries an authorization code, which must not reach a log (T22).
+CMD ["uvicorn", "api.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--no-server-header", "--no-access-log"]

@@ -34,7 +34,7 @@ from api.whatsapp import (
     parse_messages,
     valid_signature,
 )
-from shared import log
+from shared import log, tracing
 from shared.schema import StrictModel
 from shared.streams import APPROVED_ACTIONS, STREAM_MAX_LENGTH
 
@@ -150,6 +150,7 @@ def _configure_logging() -> None:
     # uvicorn configures only its own loggers before it imports the app. Route them and ours
     # through one JSON handler (shared.log); our lines hold outcomes and ids only (T22).
     log.configure("api")
+    tracing.configure("api")
 
 
 def create_app(deps: Deps | None = None) -> FastAPI:
@@ -370,6 +371,7 @@ def create_app(deps: Deps | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="not found")
         return Done(status="dismissed")
 
+    tracing.instrument_fastapi(app)
     return app
 
 
@@ -439,6 +441,7 @@ def create_webhook_app(deps: Deps | None = None) -> FastAPI:
         return Health(status="ok")
 
     add_webhook_routes(app, deps)
+    tracing.instrument_fastapi(app)
     return app
 
 

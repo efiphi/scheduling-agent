@@ -19,10 +19,11 @@ from redis.exceptions import ResponseError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from api.whatsapp import Notifier
-from shared import log
+from shared import log, tracing
 from shared.streams import NOTIFICATIONS
 
 logger = logging.getLogger(__name__)
+_tracer = tracing.tracer(__name__)
 GROUP = "api"
 BLOCK_MS = 5_000
 
@@ -46,10 +47,14 @@ def run_once(redis: Redis, notifier: Notifier, consumer: str) -> int:
     except (KeyError, ValueError):
         logger.error("invalid notification dropped")
     else:
-        try:
-            outcome = notifier.notify(user_id, action_id)
-        except Exception as exc:  # a failed notification must not block the queue
-            outcome = f"error_{type(exc).__name__}"
+        with _tracer.start_as_current_span(
+            "notification.send", context=tracing.extract(fields)
+        ) as span:
+            try:
+                outcome = notifier.notify(user_id, action_id)
+            except Exception as exc:  # a failed notification must not block the queue
+                outcome = f"error_{type(exc).__name__}"
+            span.set_attribute("notification.outcome", outcome)
         logger.info("notification handled: action_id=%s outcome=%s", action_id, outcome)
     redis.xack(NOTIFICATIONS, GROUP, message_id)
     return 1
@@ -60,6 +65,7 @@ def main() -> None:
 
     # JSON lines with the trace id; quiet HTTP clients and redaction (shared.log, T22).
     log.configure("notifier")
+    tracing.configure("notifier")
     deps = deps_from_env()
     if deps.whatsapp is None or deps.notifier is None:
         raise SystemExit("WhatsApp is not configured (see deploy/compose/.env.example)")

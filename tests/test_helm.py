@@ -370,3 +370,19 @@ def test_logs_and_traces_are_not_kept_forever() -> None:
     assert loki["loki"]["compactor"]["retention_enabled"] is True
     assert tempo["tempo"]["retention"] == "72h"
     assert prometheus["server"]["retention"] == "7d"
+
+
+# --- Telemetry (step 3.3) ------------------------------------------------------------------
+
+
+@needs_helm
+def test_workers_send_telemetry_only_to_the_collector(objects: list[dict[str, Any]]) -> None:
+    policy = next(o for o in objects if o["metadata"]["name"] == "egress-telemetry")
+    [rule] = policy["spec"]["egress"]
+    [target] = rule["to"]
+    assert target["podSelector"] == {"matchLabels": {"app.kubernetes.io/name": "alloy"}}
+    assert rule["ports"] == [{"protocol": "TCP", "port": 4318}]
+    labels = pod_labels(objects)
+    senders = {name for name, lab in labels.items() if lab.get("scheduling-agent/telemetry")}
+    assert "postgres" not in senders and "redis" not in senders and "purge-skipped" not in senders
+    assert {"agent", "api", "gmail-poll", "action-executor"} <= senders

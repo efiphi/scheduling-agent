@@ -21,6 +21,7 @@ from uuid import UUID
 from redis import Redis
 from redis.exceptions import LockError
 
+from shared import tracing
 from shared.messages import EmailTask
 from shared.schema import StrictModel
 from shared.streams import EMAIL_TASKS, STREAM_MAX_LENGTH
@@ -106,7 +107,7 @@ class RedisCoordination:
         self._redis.set(_task_key(task.task_id), record.model_dump_json(), ex=TASK_OWNER_SECONDS)
         self._redis.xadd(
             self._stream,
-            {"task": task.model_dump_json()},
+            tracing.inject({"task": task.model_dump_json()}),
             maxlen=STREAM_MAX_LENGTH,
             approximate=True,
         )

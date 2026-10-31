@@ -30,11 +30,12 @@ from google_gateway.calendar import CalendarReader, busy_intervals
 from google_gateway.coordination import PollCoordination
 from google_gateway.mail_store import MailStore
 from google_gateway.token_crypto import EncryptedToken
-from shared import log
+from shared import log, tracing
 from shared.messages import FreeBusyReply, FreeBusyRequest
 from shared.streams import FREE_BUSY_REQUESTS, REPLY_TTL_SECONDS, free_busy_reply_key
 
 logger = logging.getLogger(__name__)
+_tracer = tracing.tracer(__name__)
 
 GROUP = "gateway"
 BLOCK_MS = 5_000
@@ -69,7 +70,12 @@ class FreeBusyResponder:
         except ValidationError:
             logger.error("invalid free/busy request dropped")
         else:
-            reply = self.answer(request)
+            with _tracer.start_as_current_span(
+                "freebusy.answer", context=tracing.extract(fields)
+            ) as span:
+                reply = self.answer(request)
+                span.set_attribute("freebusy.status", reply.status)
+                span.set_attribute("freebusy.busy_count", len(reply.busy))
             key = free_busy_reply_key(request.request_id)
             pipe = self.redis.pipeline()
             pipe.lpush(key, reply.model_dump_json())
@@ -118,6 +124,7 @@ def main() -> None:
 
     # JSON lines with the trace id; quiet HTTP clients and redaction (shared.log, T22).
     log.configure("calendar-responder")
+    tracing.configure("calendar-responder")
     responder = free_busy_responder(GatewayConfig.from_env(), consumer=socket.gethostname())
     responder.ensure_group()
     while True:

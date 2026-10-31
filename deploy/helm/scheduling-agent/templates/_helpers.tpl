@@ -39,6 +39,9 @@ scheduling-agent/database: "true"
 {{- if .w.internet }}
 scheduling-agent/internet: "true"
 {{- end }}
+{{- if ne .w.telemetry false }}
+scheduling-agent/telemetry: "true"
+{{- end }}
 {{- end }}
 
 {{/*
@@ -106,6 +109,11 @@ containers:
       {{- if ne $w.database false }}
       - name: DB_HOST
         value: postgres
+      {{- end }}
+      {{- if ne $w.telemetry false }}
+      # Traces (and, from step 3.5, metrics) go to Alloy over OTLP/HTTP (shared.tracing).
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: {{ $root.Values.telemetry.endpoint | quote }}
       {{- end }}
       {{- range $key, $value := $w.env }}
       - name: {{ $key }}

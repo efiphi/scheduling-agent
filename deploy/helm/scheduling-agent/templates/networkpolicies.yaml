@@ -5,6 +5,7 @@ then each path the system really uses is opened, by pod label:
   workers -> redis:6379          scheduling-agent/redis=true    (all nine workers)
   workers -> postgres:5432       scheduling-agent/database=true (not the agent)
   workers -> internet :443       scheduling-agent/internet=true (not Postgres, Redis, migrations)
+  workers -> alloy :4318         scheduling-agent/telemetry=true (traces, metrics; Layer 3)
   traefik -> api, gateway, webhook on their HTTP port (for an Ingress; nothing else calls them)
   everyone -> cluster DNS
 
@@ -133,6 +134,26 @@ spec:
             except: {{ toJson $private }}
       ports:
         - {protocol: TCP, port: 443}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-telemetry
+  labels:
+    {{- include "sa.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {scheduling-agent/telemetry: "true"}
+  policyTypes: [Egress]
+  egress:
+    # OTLP/HTTP to the collector only; it accepts these pods and nothing else in the namespace.
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: observability}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: alloy}
+      ports:
+        - {protocol: TCP, port: 4318}
 {{- range $name, $w := .Values.workloads }}
 {{- if $w.port }}
 ---

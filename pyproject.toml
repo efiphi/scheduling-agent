@@ -10,6 +10,20 @@ requires-python = ">=3.12"
 
 [tool.uv]
 package = false
+# OpenTelemetry (Layer 3) at releases at least two weeks old when added (31.10): a release a
+# few days old has had no time for anyone to notice if it was compromised (T20).
+constraint-dependencies = [
+  "opentelemetry-api==1.45.1",
+  "opentelemetry-sdk==1.45.1",
+  "opentelemetry-exporter-otlp-proto-http==1.45.1",
+  "opentelemetry-exporter-otlp-proto-common==1.45.1",
+  "opentelemetry-proto==1.45.1",
+  "opentelemetry-semantic-conventions==0.66b1",
+  "opentelemetry-instrumentation==0.66b1",
+  "opentelemetry-instrumentation-asgi==0.66b1",
+  "opentelemetry-instrumentation-fastapi==0.66b1",
+  "opentelemetry-util-http==0.66b1",
+]
 
 [tool.uv.workspace]
 members = [

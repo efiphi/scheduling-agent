@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from google_gateway.connection import ConnectFlow, Outcome
+from shared import tracing
 from shared.schema import StrictModel
 
 CALLBACK_PATH = "/oauth/google/callback"
@@ -72,6 +73,7 @@ def create_app(flow: ConnectFlow) -> FastAPI:
         status = 200 if known in (Outcome.CONNECTED, Outcome.DECLINED) else 400
         return HTMLResponse(_page(message), status_code=status, headers=_SECURITY_HEADERS)
 
+    tracing.instrument_fastapi(app)
     return app
 
 

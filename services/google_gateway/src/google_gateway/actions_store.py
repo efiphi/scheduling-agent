@@ -17,6 +17,7 @@ from sqlalchemy.sql.expression import bindparam
 
 from db.session import set_user_context
 from google_gateway.events import write_audit
+from shared import tracing
 from shared.messages import Interval
 
 
@@ -69,8 +70,8 @@ class ActionStore(Protocol):
 
 _INSERT_ACTION = text(
     "INSERT INTO app.pending_actions"
-    " (user_id, thread_id, task_id, kind, payload, content_hash, expires_at)"
-    " VALUES (:user_id, :thread_id, :task_id, :kind, :payload, :hash, :expires)"
+    " (user_id, thread_id, task_id, kind, payload, content_hash, expires_at, trace_parent)"
+    " VALUES (:user_id, :thread_id, :task_id, :kind, :payload, :hash, :expires, :trace)"
     " ON CONFLICT (user_id, task_id) DO NOTHING RETURNING action_id"
 ).bindparams(bindparam("payload", type_=JSONB))
 
@@ -155,6 +156,8 @@ class SqlActionStore:
                     "hash": content_hash,
                     "expires": expires_at,
                     "kind": kind,
+                    # The email's trace, continued by the executor after approval.
+                    "trace": tracing.traceparent(),
                 },
             ).scalar_one_or_none()
             if action_id is None:

@@ -179,6 +179,10 @@ class PendingAction(Base):
         CheckConstraint(_in("status", ACTION_STATUSES), name="pending_actions_status"),
         # One action per agent task: a plan delivered twice creates nothing new (E8).
         UniqueConstraint("user_id", "task_id", name="pending_actions_user_task"),
+        CheckConstraint(
+            "trace_parent ~ '^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'",
+            name="pending_actions_trace_parent_format",
+        ),
     )
 
     action_id: Mapped[UUID] = _uuid_pk()
@@ -191,6 +195,8 @@ class PendingAction(Base):
     content_hash: Mapped[str] = mapped_column(Text, nullable=False)
     # The agent task this action came from; NULL for actions from a direct command.
     task_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    # The email's trace (migration 0006), continued by the executor after approval.
+    trace_parent: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
     failure_reason: Mapped[str | None] = mapped_column(Text)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

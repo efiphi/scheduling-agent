@@ -11,6 +11,7 @@ from typing import Protocol
 from pydantic import ValidationError
 from redis import Redis
 
+from shared import tracing
 from shared.messages import FreeBusyReply, FreeBusyRequest
 from shared.streams import FREE_BUSY_REQUESTS, STREAM_MAX_LENGTH, free_busy_reply_key
 
@@ -33,7 +34,7 @@ class RedisFreeBusyClient:
     def ask(self, request: FreeBusyRequest) -> FreeBusyReply | None:
         self._redis.xadd(
             FREE_BUSY_REQUESTS,
-            {"request": request.model_dump_json()},
+            tracing.inject({"request": request.model_dump_json()}),
             maxlen=STREAM_MAX_LENGTH,
             approximate=True,
         )

@@ -29,6 +29,7 @@ spec:
       labels:
         {{- include "sa.labels" . | nindent 8 }}
         app.kubernetes.io/name: migrations
+        scheduling-agent/database: "true"
     spec:
       restartPolicy: Never
       serviceAccountName: migrations
@@ -44,6 +45,13 @@ spec:
         - name: migrations
           image: {{ .Values.images.migrations | quote }}
           imagePullPolicy: {{ .Values.pullPolicy }}
+          # Retry for up to a minute before giving up: a new pod's address reaches the
+          # NetworkPolicy rules a moment after it starts, so the very first connection
+          # to Postgres is refused (seen on k3s). Migrations are idempotent.
+          command:
+            - sh
+            - -c
+            - for i in $(seq 30); do alembic upgrade head && exit 0; sleep 2; done; exit 1
           securityContext:
             {{- include "sa.containerSecurity" . | nindent 12 }}
           envFrom:

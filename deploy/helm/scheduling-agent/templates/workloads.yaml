@@ -34,6 +34,14 @@ spec:
         {{- include "sa.labels" $ | nindent 8 }}
         app.kubernetes.io/name: {{ $name }}
         app.kubernetes.io/component: {{ $w.image }}
+        # What this pod may reach (networkpolicies.yaml). Every worker uses Redis.
+        scheduling-agent/redis: "true"
+        {{- if ne $w.database false }}
+        scheduling-agent/database: "true"
+        {{- end }}
+        {{- if $w.internet }}
+        scheduling-agent/internet: "true"
+        {{- end }}
     spec:
       serviceAccountName: {{ $name }}
       automountServiceAccountToken: false

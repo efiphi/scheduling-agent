@@ -42,8 +42,8 @@ def reply_payload(
 
 EVENT_TITLE = {"he": "פגישה: {subject}", "en": "Meeting: {subject}"}
 EVENT_DESCRIPTION = {
-    "he": "האירוע נוצר על ידי עוזר התיאום האוטומטי שלי, אחרי שאישרתי אותו.",
-    "en": "This event was created by my automated scheduling assistant, after I approved it.",
+    "he": "האירוע נוצר על ידי עוזר התיאום האוטומטי שלי.",
+    "en": "This event was created by my automated scheduling assistant.",
 }
 
 

@@ -25,6 +25,7 @@ import logging
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -35,6 +36,7 @@ from pydantic import SecretStr
 from redis import Redis
 
 from api.store import ApiStore
+from shared.time_format import format_slot
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +51,18 @@ CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 PAUSED_REPLY = "הסוכן הושהה וכל הפעולות הממתינות בוטלו. חזרה לפעולה רק מהאפליקציה, אחרי התחברות."
 VERIFIED_REPLY = "המספר אומת. מעכשיו אפשר לדבר איתי כאן."
-OWNER_REPLY = "קיבלתי. פעולות שמחכות לאישור יגיעו לכאן עם כפתורים, וגם לאפליקציה."
+OWNER_REPLY = "אין כרגע פעולות שמחכות לאישור. כשתגיע בקשה, היא תופיע כאן עם כפתורים, וגם באפליקציה."
+APPROVED_REPLY = "אושר. שולח עכשיו."
+REJECTED_REPLY = "נדחה. שום דבר לא נשלח."
+DECISION_ERRORS = {
+    "hash_mismatch": "התוכן השתנה מאז ההודעה הזאת, ולכן האישור לא נקלט. בדוק באפליקציה.",
+    "expired": "הפעולה כבר פגה.",
+    "not_pending": "הפעולה כבר טופלה.",
+    "not_found": "הפעולה לא נמצאה.",
+}
+# Button ids carry the action and, for approval, the hash of the exact content shown in
+# that message: pressing it approves that content and nothing else (invariant 4, T3).
+APPROVE_PREFIX, REJECT_PREFIX = "approve:", "reject:"
 AGENT_PAUSED_REPLY = "הסוכן מושהה. חזרה לפעולה מהאפליקציה."
 
 _hasher = PasswordHasher()  # argon2id with the library's current recommended parameters
@@ -91,6 +104,12 @@ def _digest(value: str) -> str:
 class WhatsAppSender(Protocol):
     def send_text(self, to: str, text: str) -> None: ...
 
+    def send_buttons(self, to: str, text: str, buttons: list[tuple[str, str]]) -> None:
+        """Up to three reply buttons as (id, title)."""
+        ...
+
+    def send_template(self, to: str, name: str, language: str) -> None: ...
+
 
 class MetaSender:
     def __init__(self, token: SecretStr, phone_number_id: str) -> None:
@@ -99,6 +118,33 @@ class MetaSender:
 
     def send_text(self, to: str, text: str) -> None:
         self._post({"to": to, "type": "text", "text": {"body": text}})
+
+    def send_buttons(self, to: str, text: str, buttons: list[tuple[str, str]]) -> None:
+        self._post(
+            {
+                "to": to,
+                "type": "interactive",
+                "interactive": {
+                    "type": "button",
+                    "body": {"text": text[:1024]},
+                    "action": {
+                        "buttons": [
+                            {"type": "reply", "reply": {"id": bid, "title": title[:20]}}
+                            for bid, title in buttons[:3]
+                        ]
+                    },
+                },
+            }
+        )
+
+    def send_template(self, to: str, name: str, language: str) -> None:
+        self._post(
+            {
+                "to": to,
+                "type": "template",
+                "template": {"name": name, "language": {"code": language}},
+            }
+        )
 
     def _post(self, message: dict[str, Any]) -> None:
         response = httpx2.post(
@@ -178,6 +224,7 @@ class Inbound:
     sender: str  # digits, as Meta sends wa_id
     text: str
     message_id: str
+    button_id: str = ""  # set when the user pressed one of our reply buttons
 
 
 def parse_messages(payload: dict[str, Any]) -> list[Inbound]:
@@ -192,9 +239,13 @@ def parse_messages(payload: dict[str, Any]) -> list[Inbound]:
                     text = str(message.get("button", {}).get("text", ""))[:200]
                 else:
                     text = ""
+                reply = message.get("interactive", {}).get("button_reply", {})
+                button_id = (
+                    str(reply.get("id", ""))[:200] if message.get("type") == "interactive" else ""
+                )
                 sender = str(message.get("from", ""))
                 if sender.isdigit():
-                    found.append(Inbound(sender, text, str(message.get("id", ""))))
+                    found.append(Inbound(sender, text, str(message.get("id", "")), button_id))
     return found
 
 
@@ -204,6 +255,8 @@ class Inbox:
     state: InboxState
     sender: WhatsAppSender
     matches: Callable[[str, str], bool] = stop_code_matches
+    # Hands an approved action to google-gateway (the same stream as web approvals).
+    hand_over: Callable[[UUID, UUID], None] = lambda user_id, action_id: None
 
     def handle(self, message: Inbound) -> str:
         number, text = message.sender, message.text
@@ -241,8 +294,54 @@ class Inbox:
         if user is not None and user.status != "active":
             self.sender.send_text(number, AGENT_PAUSED_REPLY)
             return "paused"
-        self.sender.send_text(number, OWNER_REPLY)
-        return "owner"
+        if message.button_id:
+            return self._decide(owner, number, message.button_id)
+        # Any message opens the window: show what is waiting, each with its buttons.
+        pending = self.store.actions(owner, "pending")
+        if not pending:
+            self.sender.send_text(number, OWNER_REPLY)
+            return "owner"
+        for action in pending:
+            self.offer(number, action)
+        return "offered"
+
+    def offer(self, number: str, action: Any) -> None:
+        """Send one pending action with Approve / Reject buttons (UC-W4)."""
+        self.sender.send_buttons(
+            number,
+            preview(action),
+            [
+                (f"{APPROVE_PREFIX}{action.action_id}:{action.content_hash}", "אשר"),
+                (f"{REJECT_PREFIX}{action.action_id}", "דחה"),
+            ],
+        )
+
+    def _decide(self, user_id: UUID, number: str, button_id: str) -> str:
+        try:
+            if button_id.startswith(APPROVE_PREFIX):
+                action_text, content_hash = button_id.removeprefix(APPROVE_PREFIX).split(":", 1)
+                action_id = UUID(action_text)
+                result = self.store.approve(user_id, action_id, content_hash, channel="whatsapp")
+                if result.value != "approved":
+                    self.sender.send_text(
+                        number, DECISION_ERRORS.get(result.value, "האישור לא נקלט.")
+                    )
+                    return f"approve_{result.value}"
+                self.hand_over(user_id, action_id)
+                self.sender.send_text(number, APPROVED_REPLY)
+                return "approved"
+            if button_id.startswith(REJECT_PREFIX):
+                action_id = UUID(button_id.removeprefix(REJECT_PREFIX))
+                done = self.store.reject(user_id, action_id)
+                self.sender.send_text(
+                    number, REJECTED_REPLY if done else DECISION_ERRORS["not_pending"]
+                )
+                return "rejected" if done else "reject_not_pending"
+        except ValueError:
+            pass
+        # Not a button we made: never guess what it meant.
+        self.store.security_event(user_id, "whatsapp_unknown_button", {})
+        return "unknown_button"
 
     def _unknown(self, number: str, text: str) -> str:
         if self.state.over_limit("verify", number, VERIFY_FAILURE_LIMIT):
@@ -258,3 +357,61 @@ class Inbox:
         self.state.open_window(user_id)
         self.sender.send_text(number, VERIFIED_REPLY)
         return "verified"
+
+
+def preview(action: Any) -> str:
+    """The card in one WhatsApp message: what, to whom, when, and the full text (E10, E5)."""
+    payload = action.payload
+    time_zone = str(payload.get("time_zone", "Asia/Jerusalem"))
+    slots = [
+        format_slot(
+            datetime.fromisoformat(slot["start"]),
+            datetime.fromisoformat(slot["end"]),
+            "he",
+            time_zone,
+        )
+        for slot in payload.get("slots", [])
+    ]
+    if action.kind == "create_event":
+        lines = [
+            "אירוע חדש ביומן, עם קישור Meet, מחכה לאישורך:",
+            "",
+            str(payload.get("subject", "")),
+            "",
+        ]
+        lines += ["מועד:", *slots, "", "משתתפים: " + ", ".join(payload.get("to", []))]
+    else:
+        lines = ["תשובה חדשה מחכה לאישורך.", "", "נמענים: " + ", ".join(payload.get("to", [])), ""]
+        lines += ["מועדים פנויים:", *slots, "", "המייל המלא:", "", str(payload.get("body", ""))]
+    return "\n".join(lines)[:1024]
+
+
+@dataclass(frozen=True)
+class Notifier:
+    """Tells the user about a new pending action on WhatsApp (UC-W6, ADR-017).
+
+    Inside the 24-hour window: the action itself with buttons. Outside it: the one approved
+    template; the user's reply opens the window and brings the actions with buttons.
+    """
+
+    store: ApiStore
+    state: InboxState
+    inbox: Inbox
+    sender: WhatsAppSender
+    template: str | None
+    template_language: str = "he"
+
+    def notify(self, user_id: UUID, action_id: UUID) -> str:
+        number = self.store.whatsapp_number(user_id)
+        if number is None:
+            return "no_whatsapp"  # the web app still shows it
+        action = self.store.action(user_id, action_id)
+        if action is None or action.status != "pending":
+            return "not_pending"
+        if self.state.window_open(user_id):
+            self.inbox.offer(number, action)
+            return "offered"
+        if self.template:
+            self.sender.send_template(number, self.template, self.template_language)
+            return "template"
+        return "window_closed"

@@ -158,7 +158,7 @@ def test_a_good_plan_becomes_one_pending_action_with_the_full_email() -> None:
     assert payload["to"] == ["dana@example.org"]
     assert payload["subject"] == "Re: Quick call?"
     assert payload["gmail_thread_id"] == "g-thread"
-    assert "sent by my automated scheduling assistant" in payload["body"]
+    assert payload["body"].endswith("This email was sent by my automated scheduling assistant.")
     assert digest.startswith("sha256:")
     assert expiry == datetime(2026, 11, 2, 18, tzinfo=TZ)
 
@@ -249,3 +249,21 @@ def test_e1_a_picked_slot_that_is_now_busy_asks_the_user() -> None:
     result = s.handler.handle(plan(s, ConfirmSlot(kind="confirm_slot", slot_index=0)))
     assert result == "rejected_by_guard" and s.actions.actions == {}
     assert "כבר לא פנוי" in s.actions.questions[(s.user, s.task)]
+
+
+def test_uc_w6_a_new_action_is_announced_by_id_only() -> None:
+    s = make()
+    sent: list[tuple[UUID, UUID]] = []
+    handler = PlanHandler(
+        actions=s.actions,
+        mail=s.mail,
+        coordination=s.handler.coordination,
+        open_calendar=s.handler.open_calendar,
+        clock=lambda: NOW,
+        notify=lambda user, action: sent.append((user, action)),
+    )
+    assert handler.handle(plan(s, PROPOSE)) == "pending_action"
+    assert len(sent) == 1 and sent[0][0] == s.user
+    # A duplicate plan announces nothing new.
+    handler.handle(plan(s, PROPOSE))
+    assert len(sent) == 1

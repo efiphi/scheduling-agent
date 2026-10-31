@@ -1,0 +1,71 @@
+"""The api process that tells users about new pending actions on WhatsApp (step 1b-2).
+
+    python -m api.notifier
+
+google-gateway puts only (user_id, action_id) on the notifications stream; this process
+reads the action from the database itself, as the api's role under the user's RLS
+context, before anything is sent. The api is the only holder of the Meta token.
+"""
+
+import logging
+import socket
+from typing import Any
+from uuid import UUID
+
+from redis import Redis
+from redis.exceptions import ResponseError
+
+from api.whatsapp import Notifier
+from shared.streams import NOTIFICATIONS
+
+logger = logging.getLogger(__name__)
+GROUP = "api"
+BLOCK_MS = 5_000
+
+
+def ensure_group(redis: Redis) -> None:
+    try:
+        redis.xgroup_create(NOTIFICATIONS, GROUP, id="0", mkstream=True)
+    except ResponseError as error:
+        if "BUSYGROUP" not in str(error):
+            raise
+
+
+def run_once(redis: Redis, notifier: Notifier, consumer: str) -> int:
+    response: Any = redis.xreadgroup(GROUP, consumer, {NOTIFICATIONS: ">"}, count=1, block=BLOCK_MS)
+    if not response:
+        return 0
+    message_id, fields = response[0][1][0]
+    try:
+        user_id = UUID(fields[b"user_id"].decode())
+        action_id = UUID(fields[b"action_id"].decode())
+    except (KeyError, ValueError):
+        logger.error("invalid notification dropped")
+    else:
+        try:
+            outcome = notifier.notify(user_id, action_id)
+        except Exception as exc:  # a failed notification must not block the queue
+            outcome = f"error_{type(exc).__name__}"
+        logger.info("notification handled: action_id=%s outcome=%s", action_id, outcome)
+    redis.xack(NOTIFICATIONS, GROUP, message_id)
+    return 1
+
+
+def main() -> None:
+    from api.wiring import deps_from_env
+
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
+    for noisy in ("httpx", "httpx2"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)  # request URLs stay out (T22)
+    deps = deps_from_env()
+    if deps.whatsapp is None or deps.notifier is None:
+        raise SystemExit("WhatsApp is not configured (see deploy/compose/.env.example)")
+    ensure_group(deps.redis)
+    while True:
+        run_once(deps.redis, deps.notifier, socket.gethostname())
+
+
+if __name__ == "__main__":
+    main()

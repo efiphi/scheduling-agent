@@ -66,9 +66,17 @@ class FakeState:
 @dataclass
 class FakeSender:
     sent: list[tuple[str, str]] = field(default_factory=list)
+    buttons: list[tuple[str, str, list[tuple[str, str]]]] = field(default_factory=list)
+    templates: list[tuple[str, str]] = field(default_factory=list)
 
     def send_text(self, to: str, text: str) -> None:
         self.sent.append((to, text))
+
+    def send_buttons(self, to: str, text: str, buttons: list[tuple[str, str]]) -> None:
+        self.buttons.append((to, text, buttons))
+
+    def send_template(self, to: str, name: str, language: str) -> None:
+        self.templates.append((to, name))
 
 
 @dataclass

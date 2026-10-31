@@ -21,7 +21,7 @@ from google_gateway.gmail_sender import GoogleMailSender, MailSender
 from google_gateway.google_oauth import FlowOAuthClient
 from google_gateway.mail_store import SqlMailStore
 from google_gateway.oauth_state import RedisStateStore
-from google_gateway.plan_handler import PlanHandler
+from google_gateway.plan_handler import PlanHandler, redis_notifier
 from google_gateway.poller import MailboxPoller
 from google_gateway.token_crypto import EncryptedToken, TokenCipher
 
@@ -102,6 +102,7 @@ def plan_handler(config: GatewayConfig) -> PlanHandler:
         coordination=RedisCoordination(redis_client(config)),
         open_calendar=_calendar_opener(config),
         clock=lambda: datetime.now(UTC),
+        notify=redis_notifier(redis_client(config)),
     )
 
 

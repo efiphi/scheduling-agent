@@ -1,0 +1,159 @@
+{{- /*
+Network isolation inside the namespace (T21, invariant 7, ADR-011). Everything is denied,
+then each path the system really uses is opened, by pod label:
+
+  workers -> redis:6379          scheduling-agent/redis=true    (all nine workers)
+  workers -> postgres:5432       scheduling-agent/database=true (not the agent)
+  workers -> internet :443       scheduling-agent/internet=true (not Postgres, Redis, migrations)
+  traefik -> api, gateway, webhook on their HTTP port (for an Ingress; nothing else calls them)
+  everyone -> cluster DNS
+
+So the agent, which reads untrusted email, has no network path to the database even if it is
+taken over; Postgres and Redis cannot reach the internet; and no pod can call another's API.
+deploy/k3d/test-network-policies.sh tries each forbidden path on a running cluster.
+
+Limit: a NetworkPolicy matches IP addresses, not host names, so "internet" means any public
+address on 443, not only api.anthropic.com. Narrowing that needs an egress proxy or a CNI
+with DNS-aware policies; tracked as a follow-up.
+*/ -}}
+{{- $private := list "10.0.0.0/8" "172.16.0.0/12" "192.168.0.0/16" "100.64.0.0/10" "169.254.0.0/16" "127.0.0.0/8" }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  labels:
+    {{- include "sa.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  labels:
+    {{- include "sa.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres
+  labels:
+    {{- include "sa.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: postgres}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {scheduling-agent/database: "true"}
+      ports:
+        - {protocol: TCP, port: 5432}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis
+  labels:
+    {{- include "sa.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: redis}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {scheduling-agent/redis: "true"}
+      ports:
+        - {protocol: TCP, port: 6379}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-database
+  labels:
+    {{- include "sa.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {scheduling-agent/database: "true"}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: postgres}
+      ports:
+        - {protocol: TCP, port: 5432}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-redis
+  labels:
+    {{- include "sa.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {scheduling-agent/redis: "true"}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: redis}
+      ports:
+        - {protocol: TCP, port: 6379}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-internet
+  labels:
+    {{- include "sa.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {scheduling-agent/internet: "true"}
+  policyTypes: [Egress]
+  egress:
+    # Public addresses only: not the cluster, not private networks, not the cloud
+    # metadata service at 169.254.169.254 (which hands out the server's cloud credentials).
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: {{ toJson $private }}
+      ports:
+        - {protocol: TCP, port: 443}
+{{- range $name, $w := .Values.workloads }}
+{{- if $w.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ingress-{{ $name }}
+  labels:
+    {{- include "sa.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}}
+  policyTypes: [Ingress]
+  ingress:
+    # Only the cluster's ingress controller (Traefik, part of k3s). No pod calls another's API.
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: traefik}
+      ports:
+        - {protocol: TCP, port: {{ $w.port }}}
+{{- end }}
+{{- end }}

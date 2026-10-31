@@ -124,7 +124,8 @@ k3d image import -c scheduling-agent scheduling-agent-{api,gateway,agent,migrati
 kubectl apply -f deploy/cluster/sealed-secrets/controller.yaml
 deploy/k3d/seal-secrets.sh
 kubectl apply -f deploy/cluster/secrets/k3d/
-helm install scheduling-agent deploy/helm/scheduling-agent -n scheduling-agent --wait
+helm install scheduling-agent deploy/helm/scheduling-agent -n scheduling-agent --wait --wait-for-jobs
+deploy/k3d/test-network-policies.sh   # attack-style check of the NetworkPolicies
 kubectl -n scheduling-agent get pods
 ```
 

@@ -176,3 +176,78 @@ def test_t13_invariant_1_each_sealed_secret_holds_only_its_components_keys() -> 
 def test_every_secret_the_chart_reads_is_sealed(objects: list[dict[str, Any]]) -> None:
     used = set().union(*(secrets_of(spec) for spec in pod_specs(objects).values()))
     assert used == set(sealed())
+
+
+# --- NetworkPolicies (T21, ADR-011) --------------------------------------------------------
+# deploy/k3d/test-network-policies.sh proves these on a running cluster; here, the rendered
+# labels and rules, so a values change that opens a path fails before any cluster.
+
+
+def pod_labels(objects: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
+    kinds = {"Deployment", "StatefulSet", "Job"}
+    return {
+        o["metadata"]["name"]: o["spec"]["template"]["metadata"]["labels"]
+        for o in objects
+        if o["kind"] in kinds
+    }
+
+
+@needs_helm
+def test_t21_the_namespace_denies_all_traffic_by_default(objects: list[dict[str, Any]]) -> None:
+    policies = {o["metadata"]["name"]: o["spec"] for o in objects if o["kind"] == "NetworkPolicy"}
+    assert policies["default-deny"] == {"podSelector": {}, "policyTypes": ["Ingress", "Egress"]}
+
+
+@needs_helm
+def test_adr_011_the_agent_is_not_labeled_for_the_database(objects: list[dict[str, Any]]) -> None:
+    labels = pod_labels(objects)
+    assert "scheduling-agent/database" not in labels["agent"]
+    database = {name for name, lab in labels.items() if lab.get("scheduling-agent/database")}
+    assert database == {
+        "api",
+        "whatsapp-webhook",
+        "notifier",
+        "google-gateway",
+        "gmail-poller",
+        "calendar-responder",
+        "plan-handler",
+        "action-executor",
+        "migrations-1",
+    }
+
+
+@needs_helm
+def test_t21_data_stores_and_migrations_cannot_reach_the_internet(
+    objects: list[dict[str, Any]],
+) -> None:
+    labels = pod_labels(objects)
+    for name in ("postgres", "redis", "migrations-1"):
+        assert "scheduling-agent/internet" not in labels[name], name
+
+
+@needs_helm
+def test_t21_internet_egress_excludes_private_ranges_and_cloud_metadata(
+    objects: list[dict[str, Any]],
+) -> None:
+    policy = next(o for o in objects if o["metadata"]["name"] == "egress-internet")
+    [rule] = policy["spec"]["egress"]
+    [block] = rule["to"]
+    assert block["ipBlock"]["cidr"] == "0.0.0.0/0"
+    assert {"10.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16"} <= set(
+        block["ipBlock"]["except"]
+    )
+    assert rule["ports"] == [{"protocol": "TCP", "port": 443}]
+
+
+@needs_helm
+def test_http_services_accept_only_the_ingress_controller(objects: list[dict[str, Any]]) -> None:
+    ingress = [o for o in objects if o["metadata"]["name"].startswith("ingress-")]
+    assert {o["metadata"]["name"] for o in ingress} == {
+        "ingress-api",
+        "ingress-google-gateway",
+        "ingress-whatsapp-webhook",
+    }
+    for o in ingress:
+        [rule] = o["spec"]["ingress"]
+        [source] = rule["from"]
+        assert source["podSelector"] == {"matchLabels": {"app.kubernetes.io/name": "traefik"}}

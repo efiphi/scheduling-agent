@@ -30,7 +30,7 @@ from google_gateway.calendar import CalendarReader, busy_intervals
 from google_gateway.coordination import PollCoordination
 from google_gateway.mail_store import MailStore
 from google_gateway.token_crypto import EncryptedToken
-from shared import log, tracing
+from shared import log, metrics, tracing
 from shared.messages import FreeBusyReply, FreeBusyRequest
 from shared.streams import FREE_BUSY_REQUESTS, REPLY_TTL_SECONDS, free_busy_reply_key
 
@@ -125,8 +125,10 @@ def main() -> None:
     # JSON lines with the trace id; quiet HTTP clients and redaction (shared.log, T22).
     log.configure("calendar-responder")
     tracing.configure("calendar-responder")
+    metrics.configure("calendar-responder")
     responder = free_busy_responder(GatewayConfig.from_env(), consumer=socket.gethostname())
     responder.ensure_group()
+    metrics.observe_stream_backlog(responder.redis, FREE_BUSY_REQUESTS, GROUP)
     while True:
         try:
             responder.step()

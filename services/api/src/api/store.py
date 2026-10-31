@@ -23,6 +23,7 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError
 
 from db.session import set_user_context
+from shared import metrics
 
 
 class ApproveResult(StrEnum):
@@ -175,6 +176,13 @@ class SqlApiStore:
 
     def approve(
         self, user_id: UUID, action_id: UUID, content_hash: str, channel: str = "web"
+    ) -> ApproveResult:
+        result = self._approve(user_id, action_id, content_hash, channel)
+        metrics.ACTIONS_DECIDED.add(1, {"result": result.value, "channel": channel})
+        return result
+
+    def _approve(
+        self, user_id: UUID, action_id: UUID, content_hash: str, channel: str
     ) -> ApproveResult:
         with self._engine.begin() as conn:
             set_user_context(conn, user_id)

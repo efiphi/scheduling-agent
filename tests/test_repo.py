@@ -45,3 +45,31 @@ def test_every_process_logs_through_shared_log() -> None:
         str(p.relative_to(ROOT)) for p in sources if "logging.basicConfig" in p.read_text()
     ]
     assert offenders == []
+
+
+def test_t22_metrics_carry_only_low_cardinality_attributes() -> None:
+    # Metrics are counted across all users: a user id, an email address or a subject in an
+    # attribute would leak personal data and create a series per value. Every recording in
+    # the code is checked against shared.metrics.ALLOWED_ATTRIBUTES.
+    import ast
+
+    from shared.metrics import ALLOWED_ATTRIBUTES
+
+    found: list[tuple[str, set[str]]] = []
+    for path in sorted(ROOT.glob("services/*/src/**/*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in ("add", "record")
+                and isinstance(node.func.value, ast.Attribute)
+                and isinstance(node.func.value.value, ast.Name)
+                and node.func.value.value.id == "metrics"
+            ):
+                keys: set[str] = set()
+                for arg in node.args[1:]:
+                    assert isinstance(arg, ast.Dict), f"{path}: attributes must be a literal dict"
+                    keys |= {str(k.value) for k in arg.keys if isinstance(k, ast.Constant)}
+                found.append((f"{path.name}:{node.lineno}", keys))
+    assert len(found) >= 8  # the recordings exist
+    assert [(where, keys) for where, keys in found if not keys <= ALLOWED_ATTRIBUTES] == []

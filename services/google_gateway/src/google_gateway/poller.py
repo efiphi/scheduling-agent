@@ -30,7 +30,7 @@ from google_gateway.gmail import GmailReader, HistoryExpired, MessageMeta, Messa
 from google_gateway.mail_filter import Decision, classify, sender_address
 from google_gateway.mail_store import MailStore
 from google_gateway.token_crypto import EncryptedToken
-from shared import tracing
+from shared import metrics, tracing
 from shared.messages import (
     MAX_BODY_CHARS,
     MAX_SUBJECT_CHARS,
@@ -118,6 +118,7 @@ class MailboxPoller:
         ) as span:
             outcome = self._handle_new(user_id, user_email, ref, gmail)
             span.set_attribute("email.outcome", outcome)
+            metrics.EMAILS_RECEIVED.add(1, {"outcome": outcome})
             return outcome
 
     def _handle_new(

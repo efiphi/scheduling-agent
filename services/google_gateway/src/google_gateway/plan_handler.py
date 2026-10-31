@@ -37,7 +37,7 @@ from google_gateway.mail_store import MailStore
 from google_gateway.pending_action import content_hash, event_payload, expires_at, reply_payload
 from google_gateway.policy_guard import GuardInput, check_event, check_reply
 from google_gateway.token_crypto import EncryptedToken
-from shared import log, tracing
+from shared import log, metrics, tracing
 from shared.messages import AgentPlan, ConfirmSlot, Interval, ProposeSlots
 from shared.streams import AGENT_PLANS, NOTIFICATIONS, STREAM_MAX_LENGTH
 
@@ -278,9 +278,11 @@ def main() -> None:
     # JSON lines with the trace id; quiet HTTP clients and redaction (shared.log, T22).
     log.configure("plan-handler")
     tracing.configure("plan-handler")
+    metrics.configure("plan-handler")
     config = GatewayConfig.from_env()
     redis, handler = redis_client(config), plan_handler(config)
     ensure_group(redis)
+    metrics.observe_stream_backlog(redis, AGENT_PLANS, GROUP)
     while True:
         try:
             run_once(redis, handler, socket.gethostname())

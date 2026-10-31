@@ -145,8 +145,13 @@ class Worker:
             "agent.task", context=tracing.extract(fields), attributes={"task.id": str(task.task_id)}
         ) as span:
             plan, usage = run(self._graph, task)
-            self._cap.add(cost_usd(usage))
+            cost = cost_usd(usage)
+            self._cap.add(cost)
             span.set_attribute("agent.decision", plan.decision.kind)
+            span.set_attribute("agent.cost_usd", cost)
+            span.set_attribute("gen_ai.request.model", MODEL)
+            span.set_attribute("gen_ai.usage.input_tokens", usage.input_tokens)
+            span.set_attribute("gen_ai.usage.output_tokens", usage.output_tokens)
             self._redis.xadd(
                 AGENT_PLANS,
                 tracing.inject({"plan": plan.model_dump_json()}),

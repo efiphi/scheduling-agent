@@ -4,9 +4,13 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from agent_fakes import NOW, FakeFiller, form, task
+from opentelemetry.sdk.trace import ReadableSpan
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from agent.extraction import ModelAnswer, Usage
 from agent.graph import CALENDAR_UNAVAILABLE, NO_FREE_SLOTS, build_graph, run
+from shared import tracing
 from shared.messages import FreeBusyReply, FreeBusyRequest, Interval
 
 TZ = ZoneInfo("Asia/Jerusalem")
@@ -95,3 +99,38 @@ def test_uc_m2_picking_an_offered_slot_plans_a_confirmation_without_the_calendar
     plan, _ = run(build_graph(FakeFiller(answer), gateway, lambda: NOW), t)
     assert plan.decision.kind == "confirm_slot" and plan.decision.slot_index == 0
     assert gateway.requests == []  # the gateway re-checks the calendar itself
+
+
+# --- Agent tracing (step 3.4) ----------------------------------------------------------------
+
+_SPANS = InMemorySpanExporter()
+MARKER = "zebra-violet-quartz"  # a word that appears only in the synthetic email
+
+
+def traced_run(body: str) -> list[ReadableSpan]:
+    provider = tracing.configure("agent")
+    if not getattr(provider, "_agent_test_exporter", False):
+        provider.add_span_processor(SimpleSpanProcessor(_SPANS))
+        provider._agent_test_exporter = True  # type: ignore[attr-defined]
+    _SPANS.clear()
+    with tracing.tracer("test").start_as_current_span("agent.task", context=tracing.new_trace()):
+        plan_for(FakeFiller(), FakeGateway(), body=body)
+    return list(_SPANS.get_finished_spans())
+
+
+def test_each_graph_step_is_a_span_in_the_emails_trace() -> None:
+    spans = traced_run("Can we meet next week?")
+    names = [s.name for s in spans]
+    assert {"agent.extract", "agent.free_busy", "agent.choose_slots", "agent.plan"} <= set(names)
+    [root] = [s for s in spans if s.name == "agent.task"]
+    assert {s.context.trace_id for s in spans} == {root.context.trace_id}
+    by_name = {s.name: dict(s.attributes or {}) for s in spans}
+    assert by_name["agent.extract"]["agent.extraction"] == "MeetingRequest"
+    assert by_name["agent.choose_slots"]["agent.slot_count"] == 3
+    assert by_name["agent.plan"]["agent.decision"] == "propose_slots"
+
+
+def test_t22_no_word_of_the_email_reaches_a_span() -> None:
+    spans = traced_run(f"Hi, {MARKER} here. Can we meet on Tuesday? My number is 0501234567")
+    recorded = " ".join(f"{s.name} {dict(s.attributes or {})}" for s in spans)
+    assert MARKER not in recorded and "0501234567" not in recorded

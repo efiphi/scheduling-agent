@@ -32,6 +32,9 @@ expect() {  # expect WANT FROM HOST PORT WHY
   printf '%s %-22s -> %-26s %-8s %s\n' "$mark" "$(sed -E 's/-[a-z0-9]{8,10}-[a-z0-9]{5}$//' <<< "$from")" "$host:$port" "$got" "$why"
 }
 
+# Probe settled pods only: during a rollout the first pod listed may be one shutting down.
+kubectl -n "$NS" rollout status deploy --timeout=300s >/dev/null
+
 pod_of() { kubectl -n "$NS" get pod -l "app.kubernetes.io/name=$1" -o jsonpath='{.items[0].metadata.name}'; }
 API="$(pod_of api)"; AGENT="$(pod_of agent)"; GATEWAY="$(pod_of google-gateway)"; EXECUTOR="$(pod_of action-executor)"
 

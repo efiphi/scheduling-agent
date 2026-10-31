@@ -38,6 +38,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.13-slim@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962
 
 # A dedicated unprivileged user with no login shell (T20, T21).
+# No pip at runtime: dependencies come from uv in the build stage, and pip's own vendored
+# libraries (urllib3, msgpack, ...) were the only HIGH findings in Trivy's first scan.
+RUN rm -rf /usr/local/lib/python3.13/site-packages/pip /usr/local/lib/python3.13/site-packages/pip-*.dist-info /usr/local/bin/pip*
+
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
 

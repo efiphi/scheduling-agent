@@ -193,7 +193,8 @@ jobs:
         run: |
           helm template scheduling-agent deploy/helm/scheduling-agent \
             -f deploy/cluster/environments/k3d/values.yaml > rendered.yaml
-          kubeconform -strict -summary -kubernetes-version 1.35.0 \
+          # -skip: the upstream controller's CustomResourceDefinition has no published schema.
+          kubeconform -strict -summary -kubernetes-version 1.35.0 -skip CustomResourceDefinition \
             -schema-location default \
             -schema-location "${CRDS_CATALOG}/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
             rendered.yaml deploy/cluster/argocd deploy/cluster/secrets deploy/cluster/sealed-secrets/controller.yaml

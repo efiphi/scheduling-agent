@@ -12,6 +12,9 @@ kind: AppProject
 metadata:
   name: platform
   namespace: argocd
+  annotations:
+    # Before the Applications that belong to it (found on the first sync).
+    argocd.argoproj.io/sync-wave: "-5"
 spec:
   description: Cluster-wide components
   sourceRepos: [https://github.com/efiphi/scheduling-agent.git]
@@ -25,6 +28,9 @@ kind: AppProject
 metadata:
   name: scheduling-agent
   namespace: argocd
+  annotations:
+    # Before the Applications that belong to it (found on the first sync).
+    argocd.argoproj.io/sync-wave: "-5"
 spec:
   description: The scheduling agent
   sourceRepos: [https://github.com/efiphi/scheduling-agent.git]

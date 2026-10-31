@@ -130,6 +130,88 @@ jobs:
           TOKEN_ENCRYPTION_KEYS: ci-placeholder
         run: docker compose -f deploy/compose/compose.yaml config --quiet
 
+      # Known vulnerabilities in what we ship: OS packages and Python libraries in each image.
+      # Fails on HIGH or CRITICAL ones that have a fixed version available (T20).
+      - name: Install Trivy
+        env:
+          TRIVY_VERSION: "0.75.0"
+          TRIVY_SHA256: c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f
+        run: |
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}"
+          echo "${TRIVY_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "${archive}" trivy
+
+      - name: Scan images for vulnerabilities (Trivy)
+        run: |
+          for image in api gateway agent migrations; do
+            ./trivy image --quiet --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed \
+              --scanners vuln "scheduling-agent-${image}:ci"
+          done
+
+  kubernetes:
+    name: Kubernetes (helm lint, schemas, chart tests, Trivy config)
+    runs-on: ubuntu-latest
+    env:
+      HELM_VERSION: v4.3.0
+      HELM_SHA256: 86584a54def73570558f66f5111cc53dfed56689637ae32c1201205d494f54fb
+      KUBECONFORM_VERSION: v0.8.0
+      KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+      TRIVY_VERSION: "0.75.0"
+      TRIVY_SHA256: c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f
+      # Schemas for the custom resources (SealedSecret, Argo CD), pinned to a commit.
+      CRDS_CATALOG: https://raw.githubusercontent.com/datreeio/CRDs-catalog/3eb90d47aba8d61919d4419dd38301536e32a94b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Every tool from its official release, checked against a pinned SHA-256 (T20).
+      - name: Install Helm, kubeconform and Trivy
+        run: |
+          mkdir -p "$HOME/bin" && cd "$HOME/bin"
+          curl -fsSLO "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  helm-${HELM_VERSION}-linux-amd64.tar.gz" | sha256sum -c -
+          tar -xzf "helm-${HELM_VERSION}-linux-amd64.tar.gz" --strip-components=1 linux-amd64/helm
+          curl -fsSLO "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  kubeconform-linux-amd64.tar.gz" | sha256sum -c -
+          tar -xzf kubeconform-linux-amd64.tar.gz kubeconform
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}"
+          echo "${TRIVY_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "${archive}" trivy
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: helm lint (default values and the k3d environment)
+        run: |
+          helm lint --strict deploy/helm/scheduling-agent
+          helm lint --strict deploy/helm/scheduling-agent -f deploy/cluster/environments/k3d/values.yaml
+
+      # Every manifest against the Kubernetes API schemas of the version k3d runs, so a typo
+      # in a field name fails here instead of being silently dropped by the cluster.
+      - name: Validate manifests against Kubernetes schemas (kubeconform)
+        run: |
+          helm template scheduling-agent deploy/helm/scheduling-agent \
+            -f deploy/cluster/environments/k3d/values.yaml > rendered.yaml
+          # -skip: the upstream controller's CustomResourceDefinition has no published schema.
+          kubeconform -strict -summary -kubernetes-version 1.35.0 -skip CustomResourceDefinition \
+            -schema-location default \
+            -schema-location "${CRDS_CATALOG}/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
+            rendered.yaml deploy/cluster/argocd deploy/cluster/secrets deploy/cluster/sealed-secrets/controller.yaml
+
+      # Misconfigurations in our own manifests (privileged pods, missing limits, ...). The
+      # upstream Sealed Secrets and Argo CD manifests are not ours to change, so not scanned.
+      - name: Scan manifests for misconfigurations (Trivy)
+        run: |
+          trivy config --quiet --exit-code 1 --severity HIGH,CRITICAL deploy/helm/scheduling-agent
+          trivy config --quiet --exit-code 1 --severity HIGH,CRITICAL deploy/cluster/argocd
+
+      # tests/test_helm.py skips without helm; here helm is installed, so every chart
+      # test runs (hardening, per-component secrets, NetworkPolicies, CronJobs).
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - name: Chart tests
+        run: uv run pytest tests/test_helm.py -v
+
   database:
     name: Database and Redis, roles, migrations and permissions (T3, T10, T13, T16, T24)
     runs-on: ubuntu-latest

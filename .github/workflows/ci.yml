@@ -197,7 +197,8 @@ jobs:
           kubeconform -strict -summary -kubernetes-version 1.35.0 -skip CustomResourceDefinition \
             -schema-location default \
             -schema-location "${CRDS_CATALOG}/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
-            rendered.yaml deploy/cluster/argocd deploy/cluster/secrets deploy/cluster/sealed-secrets/controller.yaml
+            rendered.yaml deploy/cluster/argocd deploy/cluster/secrets deploy/cluster/sealed-secrets/controller.yaml \
+            deploy/cluster/traefik deploy/cluster/observability/manifests
 
       # Misconfigurations in our own manifests (privileged pods, missing limits, ...). The
       # upstream Sealed Secrets and Argo CD manifests are not ours to change, so not scanned.
@@ -205,6 +206,7 @@ jobs:
         run: |
           trivy config --quiet --exit-code 1 --severity HIGH,CRITICAL deploy/helm/scheduling-agent
           trivy config --quiet --exit-code 1 --severity HIGH,CRITICAL deploy/cluster/argocd
+          trivy config --quiet --exit-code 1 --severity HIGH,CRITICAL deploy/cluster/observability/manifests
 
       # tests/test_helm.py skips without helm; here helm is installed, so every chart
       # test runs (hardening, per-component secrets, NetworkPolicies, CronJobs).

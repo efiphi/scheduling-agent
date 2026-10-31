@@ -1,0 +1,28 @@
+# Prometheus (chart prometheus-community/prometheus): metrics. Services push theirs over
+# OTLP to Alloy, which writes them here (remote write), so no service opens a /metrics port.
+# Prometheus itself scrapes only Kubernetes: kube-state-metrics (restarts, CronJob results)
+# and the kubelet (container CPU and memory).
+server:
+  retention: 7d
+  extraFlags: [web.enable-remote-write-receiver, web.enable-lifecycle]
+  persistentVolume: {size: 2Gi}
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 768Mi}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
+    seccompProfile: {type: RuntimeDefault}
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: {drop: [ALL]}
+alertmanager: {enabled: false}   # alerts are Grafana's (step 3.6)
+prometheus-node-exporter: {enabled: false}  # the "node" is a container in k3d
+prometheus-pushgateway: {enabled: false}
+kube-state-metrics:
+  resources:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {memory: 128Mi}

@@ -21,3 +21,15 @@ def test_every_dockerfile_copies_every_workspace_members_pyproject(dockerfile: P
 
 def test_there_are_dockerfiles_to_check() -> None:
     assert len(DOCKERFILES) >= 2
+
+
+def test_redis_reads_outlast_every_queue_wait() -> None:
+    # A consumer blocks up to BLOCK_MS for new messages; if the client's read timeout is not
+    # longer, an idle queue raises TimeoutError and crashes the process (found 31.10).
+    from agent import worker
+    from api import notifier
+    from google_gateway import executor, free_busy_responder, plan_handler
+    from shared.streams import REDIS_SOCKET_TIMEOUT_SECONDS
+
+    waits = [m.BLOCK_MS for m in (worker, notifier, executor, free_busy_responder, plan_handler)]
+    assert 2 * max(waits) < REDIS_SOCKET_TIMEOUT_SECONDS * 1000

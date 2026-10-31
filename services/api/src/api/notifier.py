@@ -9,11 +9,14 @@ context, before anything is sent. The api is the only holder of the Meta token.
 
 import logging
 import socket
+import time
 from typing import Any
 from uuid import UUID
 
 from redis import Redis
+from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import ResponseError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from api.whatsapp import Notifier
 from shared.streams import NOTIFICATIONS
@@ -64,7 +67,12 @@ def main() -> None:
         raise SystemExit("WhatsApp is not configured (see deploy/compose/.env.example)")
     ensure_group(deps.redis)
     while True:
-        run_once(deps.redis, deps.notifier, socket.gethostname())
+        try:
+            run_once(deps.redis, deps.notifier, socket.gethostname())
+        except (RedisTimeoutError, RedisConnectionError) as exc:
+            # A Redis hiccup is not a reason to die; unacknowledged work is retried.
+            logger.warning("redis unavailable, retrying: error=%s", type(exc).__name__)
+            time.sleep(1)
 
 
 if __name__ == "__main__":

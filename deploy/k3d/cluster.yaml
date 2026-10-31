@@ -1,0 +1,27 @@
+# Local Kubernetes for Layer 2: k3s (a small, certified Kubernetes) inside Docker, via k3d.
+#   k3d cluster create --config deploy/k3d/cluster.yaml
+#   k3d cluster delete scheduling-agent
+#
+# The same manifests (deploy/helm) are meant to run on k3s in the cloud later (ADR-009).
+# k3s ships a NetworkPolicy controller, so the policies in step 2.4 are enforced here.
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: scheduling-agent
+servers: 1
+agents: 0
+# Pinned by digest, like every image in the project (T20).
+image: rancher/k3s:v1.35.5-k3s1@sha256:2074403abe1bded11ef3dde09d457e13be8e0b64c218b1c4f8269b4565cfbc65
+ports:
+  # The cluster's ingress (Traefik, bundled with k3s), reachable from this machine only.
+  - port: 127.0.0.1:8080:80
+    nodeFilters: [loadbalancer]
+kubeAPI:
+  hostIP: 127.0.0.1
+  hostPort: "6550"
+options:
+  k3d:
+    wait: true
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: true

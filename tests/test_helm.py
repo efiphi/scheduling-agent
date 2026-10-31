@@ -319,3 +319,54 @@ def test_only_the_three_http_services_are_exposed_each_on_its_own_entry_point(
         # The only part reachable from the internet, through the tunnel (ADR-017).
         "whatsapp-webhook": ("sa-webhook", ["/whatsapp/webhook"]),
     }
+
+
+# --- Observability (step 3.1) --------------------------------------------------------------
+
+OBSERVABILITY = ROOT / "deploy/cluster/observability"
+
+
+def observability_manifests() -> list[dict[str, Any]]:
+    return [
+        doc
+        for path in sorted((OBSERVABILITY / "manifests").glob("*.yaml"))
+        for doc in yaml.safe_load_all(path.read_text())
+        if doc
+    ]
+
+
+def test_t17_grafanas_login_is_sealed_never_plain() -> None:
+    kinds = {doc["metadata"]["name"]: doc["kind"] for doc in observability_manifests()}
+    assert kinds["grafana-admin"] == "SealedSecret"
+    assert "Secret" not in kinds.values()
+
+
+def test_t21_the_monitoring_tools_deny_ingress_by_default() -> None:
+    policies = {
+        doc["metadata"]["name"]: doc["spec"]
+        for doc in observability_manifests()
+        if doc["kind"] == "NetworkPolicy"
+    }
+    assert policies["default-deny-ingress"] == {"podSelector": {}, "policyTypes": ["Ingress"]}
+    # Grafana is reached only through port-forward: no policy lets any pod in.
+    selected = [p["podSelector"].get("matchLabels", {}) for p in policies.values()]
+    assert {"app.kubernetes.io/name": "grafana"} not in selected
+
+
+def test_grafana_does_not_phone_home_or_allow_anonymous_access() -> None:
+    values = yaml.safe_load((OBSERVABILITY / "grafana.yaml").read_text())
+    ini = values["grafana.ini"]
+    assert ini["analytics"]["reporting_enabled"] is False
+    assert ini["auth.anonymous"]["enabled"] is False
+    assert values["admin"]["existingSecret"] == "grafana-admin"
+
+
+def test_logs_and_traces_are_not_kept_forever() -> None:
+    # Logs carry user ids: 7 days like skipped emails (UC-M8); traces 3 days.
+    loki = yaml.safe_load((OBSERVABILITY / "loki.yaml").read_text())
+    tempo = yaml.safe_load((OBSERVABILITY / "tempo.yaml").read_text())
+    prometheus = yaml.safe_load((OBSERVABILITY / "prometheus.yaml").read_text())
+    assert loki["loki"]["limits_config"]["retention_period"] == "168h"
+    assert loki["loki"]["compactor"]["retention_enabled"] is True
+    assert tempo["tempo"]["retention"] == "72h"
+    assert prometheus["server"]["retention"] == "7d"

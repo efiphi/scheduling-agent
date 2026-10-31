@@ -137,6 +137,12 @@ kubectl apply -f deploy/cluster/argocd/root.yaml # the app of apps
 kubectl -n argocd get applications
 ```
 
+**Monitoring (Layer 3):** Prometheus, Loki, Tempo and Grafana, with Grafana Alloy collecting, all deployed by Argo CD into the `observability` namespace. Grafana has no Ingress; open it with a port-forward and log in as `admin` with `GRAFANA_ADMIN_PASSWORD` from `deploy/compose/.env`:
+
+```bash
+kubectl -n observability port-forward svc/grafana 3000:80   # then http://localhost:3000
+```
+
 Connecting a Google account on the cluster runs inside the gateway pod, which holds its secrets:
 
 ```bash

@@ -67,7 +67,8 @@ Work strictly in the layers defined in `docs/03-architecture.md`. Do not jump ah
 - **Layer 0 — skeleton:** repo structure, Docker Compose (Postgres, Redis), empty FastAPI service, `.gitignore`, pre-commit (ruff, gitleaks), basic GitHub Actions CI. *(done, 25.10)*
 - **Layer 1 — MVP core:** end-to-end thin path on a demo Gmail account: email → detection → slots → draft → approval → send + Meet event. *(done, 31.10)* Order: 1a email → web-app approval → reply in thread; 1b WhatsApp; 1c counterpart picks a slot → event with Meet.
 - **Layer 2 — Kubernetes + GitOps:** k3d, Helm chart, Sealed Secrets, NetworkPolicies, Argo CD + GHCR, CronJobs, CI gates. *(done, 31.10)*
-- **Layers 3–6:** observability, evals + red team in CI, detection layer, temporary cloud.
+- **Layer 3 — observability:** live demo on the cluster, OpenTelemetry traces (one per email), agent run tracing, JSON logs, metrics, Grafana dashboards and alerts as code (ADR-018). *(done, 1.11)*
+- **Layers 4–6:** evals + red team in CI, detection layer, temporary cloud.
 
 ## Conventions
 

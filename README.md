@@ -108,7 +108,7 @@ Prove the database roles hold up (15 attack-style checks):
 docker compose -f deploy/compose/compose.yaml exec -T postgres sh /tests/test-roles.sh
 ```
 
-**Kubernetes (Layer 2, in progress):** [k3d](https://k3d.io) runs k3s inside Docker, bound to `127.0.0.1`.
+**Kubernetes (where the live demo runs since Layer 3):** [k3d](https://k3d.io) runs k3s inside Docker, bound to `127.0.0.1`. The system answers on the same addresses as under Compose (api on `:8000`, the gateway's OAuth callback on `:8001`, the WhatsApp webhook on `:8002`), so the Google redirect URIs and the tunnel do not change. Run one or the other, not both: they use the same ports.
 
 ```bash
 k3d cluster create --config deploy/k3d/cluster.yaml
@@ -135,6 +135,20 @@ kubectl -n scheduling-agent get pods
 deploy/cluster/argocd/install.sh                 # Argo CD itself, checksum- and digest-pinned
 kubectl apply -f deploy/cluster/argocd/root.yaml # the app of apps
 kubectl -n argocd get applications
+```
+
+Connecting a Google account on the cluster runs inside the gateway pod, which holds its secrets:
+
+```bash
+kubectl -n scheduling-agent exec deploy/google-gateway -- python -m google_gateway.connect --user-id <id>
+```
+
+Moving data from Compose to the cluster (one time; the app schema only, as the Postgres superuser):
+
+```bash
+docker compose -f deploy/compose/compose.yaml exec -T postgres \
+  pg_dump -U postgres -d scheduling_agent --data-only --schema=app --exclude-table=app.alembic_version --disable-triggers \
+  | kubectl -n scheduling-agent exec -i postgres-0 -- psql -U postgres -d scheduling_agent -v ON_ERROR_STOP=1
 ```
 
 **Web app:**

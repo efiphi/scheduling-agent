@@ -115,6 +115,17 @@ k3d cluster create --config deploy/k3d/cluster.yaml
 kubectl get nodes
 ```
 
+The whole system runs from one Helm chart (`deploy/helm/scheduling-agent`): every service, Postgres, Redis, and the migrations as a Job. Secrets come from your `deploy/compose/.env`, each component getting only its own keys:
+
+```bash
+docker compose -f deploy/compose/compose.yaml build api google-gateway agent
+docker build -f packages/db/Dockerfile -t scheduling-agent-migrations:dev .
+k3d image import -c scheduling-agent scheduling-agent-{api,gateway,agent,migrations}:dev
+deploy/k3d/create-secrets.sh
+helm install scheduling-agent deploy/helm/scheduling-agent -n scheduling-agent --wait
+kubectl -n scheduling-agent get pods
+```
+
 **Web app:**
 
 ```bash

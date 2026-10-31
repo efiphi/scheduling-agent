@@ -1,0 +1,6 @@
+apiVersion: v2
+name: scheduling-agent
+description: The scheduling agent on Kubernetes — every service, Postgres, Redis and migrations (Layer 2).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

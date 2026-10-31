@@ -32,6 +32,8 @@ dev = [
   "mypy",
   "pip-audit",
   "pytest",
+  # Reads the rendered Helm chart in tests/test_helm.py (already in the lock via langchain).
+  "pyyaml",
   "ruff",
   "shared",
 ]
@@ -91,9 +93,9 @@ files = [
   "tests",
 ]
 
-# Google's OAuth helper and API client ship without type information.
+# Google's OAuth helper and API client, and PyYAML, ship without type information.
 [[tool.mypy.overrides]]
-module = ["google_auth_oauthlib.*", "googleapiclient.*"]
+module = ["google_auth_oauthlib.*", "googleapiclient.*", "yaml.*"]
 ignore_missing_imports = true
 
 # --- Tests -----------------------------------------------------------------

@@ -7,7 +7,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 MEMBERS = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["uv"]["workspace"]["members"]
-DOCKERFILES = sorted(ROOT.glob("services/*/Dockerfile"))
+DOCKERFILES = sorted([*ROOT.glob("services/*/Dockerfile"), *ROOT.glob("packages/*/Dockerfile")])
 
 
 @pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=lambda p: p.parent.name)

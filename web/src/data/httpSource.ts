@@ -3,7 +3,7 @@ import { redirect } from "react-router";
 import type { components } from "../api/schema";
 import type { Account } from "../domain/account";
 import type { PendingAction } from "../domain/actions";
-import type { AgentQuestion, DataSource, DecisionResult } from "./source";
+import type { AgentQuestion, DataSource, DecisionResult, SecurityStatus, WhatsAppVerification } from "./source";
 
 // The real API (services/api), reached at /api through the Vite dev proxy or nginx, so the
 // browser sees one origin: the session cookie is sent, and no CORS rules are needed.
@@ -11,6 +11,8 @@ import type { AgentQuestion, DataSource, DecisionResult } from "./source";
 type ActionOut = components["schemas"]["ActionOut"];
 type Me = components["schemas"]["Me"];
 type QuestionOut = components["schemas"]["QuestionOut"];
+type SecurityOut = components["schemas"]["SecurityOut"];
+type VerificationOut = components["schemas"]["VerificationOut"];
 
 const BASE = "/api";
 const POLL_MS = 15_000;
@@ -45,6 +47,22 @@ export function toPendingAction(a: ActionOut): PendingAction {
 
 export function createHttpSource(fetchCsrf: () => Promise<string> = defaultCsrf): DataSource {
   let csrf: string | undefined;
+
+  async function send(method: string, path: string, body?: unknown): Promise<Response> {
+    csrf ??= await fetchCsrf();
+    return fetch(`${BASE}${path}`, {
+      method,
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  }
+
+  async function result(response: Response): Promise<DecisionResult> {
+    if (response.ok) return { ok: true };
+    const detail = await response.json().then((j: { detail?: unknown }) => j.detail, () => undefined);
+    return { ok: false, reason: typeof detail === "string" ? detail : String(response.status) };
+  }
 
   async function post(path: string, body?: unknown): Promise<DecisionResult> {
     csrf ??= await fetchCsrf();
@@ -87,6 +105,26 @@ export function createHttpSource(fetchCsrf: () => Promise<string> = defaultCsrf)
     approve: (id, contentHash) => post(`/actions/${encodeURIComponent(id)}/approve`, { content_hash: contentHash }),
     reject: (id) => post(`/actions/${encodeURIComponent(id)}/reject`),
     dismissQuestion: (id) => post(`/questions/${encodeURIComponent(id)}/dismiss`),
+    getSecurity: async (): Promise<SecurityStatus> => {
+      const s = await getJson<SecurityOut>("/security");
+      return {
+        agentStatus: s.agent_status === "paused" ? "paused" : "active",
+        whatsappVerified: s.whatsapp_verified,
+        stopCodeSet: s.stop_code_set,
+        backupNumbers: s.backup_numbers,
+      };
+    },
+    pauseAgent: () => post("/security/pause"),
+    resumeAgent: () => post("/security/resume"),
+    setStopCode: async (code) => result(await send("PUT", "/security/stop-code", { code })),
+    setBackupNumbers: async (numbers) => result(await send("PUT", "/security/backup-numbers", { numbers })),
+    startWhatsAppVerification: async (): Promise<WhatsAppVerification | null> => {
+      const response = await send("POST", "/whatsapp/verify");
+      if (!response.ok) return null;
+      const v = (await response.json()) as VerificationOut;
+      return { code: v.code, agentNumber: v.agent_number, expiresInSeconds: v.expires_in_seconds };
+    },
+    logOutEverywhere: async () => result(await send("DELETE", "/sessions")),
     // Not in the API yet in the MVP: empty screens until their endpoints exist.
     listHistory: () => Promise.resolve([]),
     listContacts: () => Promise.resolve([]),

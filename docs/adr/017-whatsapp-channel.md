@@ -28,6 +28,13 @@ Meta's rules shape the design. A business may write freely only within **24 hour
 - **Notifications** use free-form messages with buttons inside the window. Outside it, one approved utility template tells the user that an action is waiting (step 1b-2).
 - **Development exposure:** a Cloudflare *quick* tunnel. It needs no account and no domain, and its URL changes on every run, so Meta's webhook setting is updated each time. A fixed URL comes with the cloud server (Layer 6).
 
+**Implementation of approvals (step 1b-2):**
+- google-gateway announces a new pending action on `api:notifications`, by id only.
+- The api's `notifier` reads the action from the database itself.
+- **Inside the window,** it sends the action with Approve / Reject reply buttons. The approve button's id carries the action id **and its content hash**, so pressing it approves exactly the content in that message (invariant 4). It goes through the same single-use approval record as the web app, with channel `whatsapp`.
+- **Outside the window,** it sends the template named in `WHATSAPP_NOTIFY_TEMPLATE`, if one is approved. Any reply from the owner opens the window and brings every waiting action with buttons.
+- A button the api did not create is a security event and is never guessed at.
+
 ## Alternatives considered
 
 - **Outbound verification code (the agent sends it).** This was the original plan in docs/04-web-app.md. It needs a template for the very first message, so it would have been paid and needed approval before anything works.

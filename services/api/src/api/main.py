@@ -26,7 +26,14 @@ from redis import Redis
 from api.google_login import GoogleLogin, LoginError
 from api.sessions import LoginState, Session, SessionStore, new_token
 from api.store import ApiStore, ApproveResult
-from api.whatsapp import Inbox, InboxState, hash_stop_code, parse_messages, valid_signature
+from api.whatsapp import (
+    Inbox,
+    InboxState,
+    Notifier,
+    hash_stop_code,
+    parse_messages,
+    valid_signature,
+)
 from shared.schema import StrictModel
 from shared.streams import APPROVED_ACTIONS, STREAM_MAX_LENGTH
 
@@ -131,6 +138,7 @@ class Deps:
     web_app_url: str
     cookie_secure: bool
     whatsapp: WhatsAppDeps | None = None
+    notifier: "Notifier | None" = None
 
 
 # Sensitive changes need a login within the last 10 minutes, not just a live session.

@@ -68,6 +68,7 @@ class FakeStore:
     users: dict[UUID, User] = field(default_factory=dict)
     actions_by_id: dict[UUID, tuple[UUID, Action]] = field(default_factory=dict)
     approvals: set[UUID] = field(default_factory=set)
+    channels: dict[UUID, str] = field(default_factory=dict)
     audits: list[tuple[UUID, str]] = field(default_factory=list)
     numbers: dict[UUID, str] = field(default_factory=dict)
     backups: dict[UUID, list[str]] = field(default_factory=dict)
@@ -110,7 +111,9 @@ class FakeStore:
         owner, found = self.actions_by_id.get(action_id, (None, None))
         return found if owner == user_id else None
 
-    def approve(self, user_id: UUID, action_id: UUID, content_hash: str) -> ApproveResult:
+    def approve(
+        self, user_id: UUID, action_id: UUID, content_hash: str, channel: str = "web"
+    ) -> ApproveResult:
         found = self.action(user_id, action_id)
         if found is None:
             return ApproveResult.NOT_FOUND
@@ -121,6 +124,7 @@ class FakeStore:
         if content_hash != found.content_hash:
             return ApproveResult.HASH_MISMATCH
         self.approvals.add(action_id)
+        self.channels[action_id] = channel
         self.actions_by_id[action_id] = (
             user_id,
             Action(**{**found.__dict__, "status": "approved"}),
@@ -155,6 +159,9 @@ class FakeStore:
 
     def stop_code_hash(self, user_id: UUID) -> str | None:
         return self.stop_hashes.get(user_id)
+
+    def whatsapp_number(self, user_id: UUID) -> str | None:
+        return self.numbers.get(user_id)
 
     def whatsapp_verified(self, user_id: UUID) -> bool:
         return user_id in self.numbers

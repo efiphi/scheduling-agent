@@ -36,6 +36,8 @@ class ApiConfig(StrictModel):
     whatsapp_phone_number_id: str | None = None
     whatsapp_app_secret: SecretStr | None = None
     whatsapp_verify_token: SecretStr | None = None
+    # The approved utility template for notifications outside the 24-hour window.
+    whatsapp_template: str | None = None
 
     @classmethod
     def from_env(cls) -> "ApiConfig":
@@ -55,6 +57,7 @@ class ApiConfig(StrictModel):
             whatsapp_phone_number_id=os.environ.get("WHATSAPP_PHONE_NUMBER_ID") or None,
             whatsapp_app_secret=_optional_secret("WHATSAPP_APP_SECRET"),
             whatsapp_verify_token=_optional_secret("WHATSAPP_VERIFY_TOKEN"),
+            whatsapp_template=os.environ.get("WHATSAPP_NOTIFY_TEMPLATE") or None,
         )
 
     @property

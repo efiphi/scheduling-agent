@@ -68,7 +68,11 @@ class ApiStore(Protocol):
 
     def action(self, user_id: UUID, action_id: UUID) -> Action | None: ...
 
-    def approve(self, user_id: UUID, action_id: UUID, content_hash: str) -> ApproveResult: ...
+    def approve(
+        self, user_id: UUID, action_id: UUID, content_hash: str, channel: str = "web"
+    ) -> ApproveResult: ...
+
+    def whatsapp_number(self, user_id: UUID) -> str | None: ...
 
     def reject(self, user_id: UUID, action_id: UUID) -> bool: ...
 
@@ -169,7 +173,9 @@ class SqlApiStore:
             ).one_or_none()
         return None if row is None else _action(row)
 
-    def approve(self, user_id: UUID, action_id: UUID, content_hash: str) -> ApproveResult:
+    def approve(
+        self, user_id: UUID, action_id: UUID, content_hash: str, channel: str = "web"
+    ) -> ApproveResult:
         with self._engine.begin() as conn:
             set_user_context(conn, user_id)
             row = conn.execute(
@@ -191,9 +197,9 @@ class SqlApiStore:
             conn.execute(
                 text(
                     "INSERT INTO app.approvals (user_id, action_id, content_hash, channel)"
-                    " VALUES (:u, :a, :h, 'web')"
+                    " VALUES (:u, :a, :h, :c)"
                 ),
-                {"u": user_id, "a": action_id, "h": content_hash},
+                {"u": user_id, "a": action_id, "h": content_hash, "c": channel},
             )
             conn.execute(
                 text(
@@ -203,7 +209,7 @@ class SqlApiStore:
                 {"u": user_id, "a": action_id},
             )
             _audit(
-                conn, user_id, "action_approved", {"action_id": str(action_id), "channel": "web"}
+                conn, user_id, "action_approved", {"action_id": str(action_id), "channel": channel}
             )
         return ApproveResult.APPROVED
 
@@ -267,6 +273,14 @@ class SqlApiStore:
                 text("SELECT stop_code_hash FROM app.users WHERE user_id = :u"), {"u": user_id}
             ).scalar_one_or_none()
         return None if value is None else str(value)
+
+    def whatsapp_number(self, user_id: UUID) -> str | None:
+        with self._engine.begin() as conn:
+            set_user_context(conn, user_id)
+            number = conn.execute(
+                text("SELECT whatsapp_number FROM app.users WHERE user_id = :u"), {"u": user_id}
+            ).scalar_one_or_none()
+        return None if number is None else str(number)
 
     def whatsapp_verified(self, user_id: UUID) -> bool:
         with self._engine.begin() as conn:

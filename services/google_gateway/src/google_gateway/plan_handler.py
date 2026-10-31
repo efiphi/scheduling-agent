@@ -35,7 +35,7 @@ from google_gateway.pending_action import content_hash, event_payload, expires_a
 from google_gateway.policy_guard import GuardInput, check_event, check_reply
 from google_gateway.token_crypto import EncryptedToken
 from shared.messages import AgentPlan, ConfirmSlot, Interval, ProposeSlots
-from shared.streams import AGENT_PLANS
+from shared.streams import AGENT_PLANS, NOTIFICATIONS, STREAM_MAX_LENGTH
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,7 @@ class PlanHandler:
     coordination: PollCoordination
     open_calendar: OpenCalendar
     clock: Callable[[], datetime]
+    notify: Callable[[UUID, UUID], None] = lambda user_id, action_id: None
 
     def handle(self, plan: AgentPlan) -> str:
         record = self.coordination.task_record(plan.task_id)
@@ -135,7 +136,10 @@ class PlanHandler:
             expires_at(context, self.actions.end_of_workday(user)),
             kind="create_event",
         )
-        return "pending_action" if action_id else "duplicate"
+        if action_id is None:
+            return "duplicate"
+        self.notify(user, action_id)
+        return "pending_action"
 
     def _propose(self, plan: AgentPlan, decision: ProposeSlots, subject: str) -> str:
         user, thread_id = plan.user_id, plan.thread_id
@@ -195,7 +199,10 @@ class PlanHandler:
             content_hash(payload),
             expires_at(context, self.actions.end_of_workday(user)),
         )
-        return "pending_action" if action_id else "duplicate"
+        if action_id is None:
+            return "duplicate"
+        self.notify(user, action_id)
+        return "pending_action"
 
     def _busy_now(
         self, user: UUID, token: EncryptedToken, time_zone: str, slots: tuple[Interval, ...]
@@ -211,6 +218,20 @@ class PlanHandler:
             logger.error("calendar re-check failed: error=%s", type(exc).__name__)
             return None
         return busy_intervals(events, window)
+
+
+def redis_notifier(redis: Redis) -> Callable[[UUID, UUID], None]:
+    """Tell the api a new action is waiting; the api decides how to reach the user."""
+
+    def notify(user_id: UUID, action_id: UUID) -> None:
+        redis.xadd(
+            NOTIFICATIONS,
+            {"user_id": str(user_id), "action_id": str(action_id)},
+            maxlen=STREAM_MAX_LENGTH,
+            approximate=True,
+        )
+
+    return notify
 
 
 def run_once(redis: Redis, handler: PlanHandler, consumer: str) -> int:

@@ -148,6 +148,34 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
 
+  # Tells users about new pending actions on WhatsApp (ADR-017). The api image: only the
+  # api holds the Meta token. Reads (user, action) ids and loads the action itself.
+  notifier:
+    image: scheduling-agent-api:dev
+    <<: *hardening
+    read_only: true
+    tmpfs: [/tmp]
+    restart: unless-stopped
+    networks: [data, queue]
+    command: ["python", "-m", "api.notifier"]
+    # A queue worker, not a web server: the api image's HTTP health check does not apply.
+    healthcheck: { disable: true }
+    environment:
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?set API_DB_PASSWORD in deploy/compose/.env}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in deploy/compose/.env}
+      GOOGLE_LOGIN_CLIENT_ID: ${GOOGLE_LOGIN_CLIENT_ID:-}
+      GOOGLE_LOGIN_CLIENT_SECRET: ${GOOGLE_LOGIN_CLIENT_SECRET:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
+      WHATSAPP_NOTIFY_TEMPLATE: ${WHATSAPP_NOTIFY_TEMPLATE:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
   # google-gateway: one image, two processes. Only these two containers get Google
   # secrets and the token key; the api container gets none of them (invariant 1).
   google-gateway:

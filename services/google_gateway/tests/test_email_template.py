@@ -40,14 +40,15 @@ def test_invariant_10_disclosure_is_always_the_last_line(language: str) -> None:
 def test_hebrew_slots_name_the_day_and_the_time_zone() -> None:
     _, body = reply("he", "תודה על הפנייה!")
     assert "יום שלישי, 3 בנובמבר, 10:00-10:30" in body
-    assert "שעון ישראל" in body
+    # No time zone named (owner's decision, 31.10): times are in the user's own zone.
+    assert "שעון" not in body
     assert body.startswith("תודה על הפנייה!")
 
 
-def test_e3_english_slots_state_the_time_zone() -> None:
+def test_english_slots_are_written_out_in_the_users_zone() -> None:
     _, body = reply("en")
     assert "Tuesday, 3 November, 10:00-10:30" in body
-    assert "Israel time" in body
+    assert "time)" not in body
 
 
 def test_slot_times_are_written_in_the_users_zone_even_if_given_in_utc() -> None:

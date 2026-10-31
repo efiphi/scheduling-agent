@@ -1,0 +1,133 @@
+name: Images
+
+# After CI passes on main: build the four images, push them to GHCR, and point the k3d
+# environment at them by digest. Argo CD then syncs the cluster from git (step 2.5).
+#
+# Runs on workflow_run, so only commits that already passed every CI check are built,
+# and always with the workflow file from main, never from a pull request (T20).
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/efiphi
+  SHA: ${{ github.event.workflow_run.head_sha }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.image }} (${{ matrix.arch }})
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    # Native runners for each architecture: the Mac running k3d is arm64, a cloud server
+    # may be amd64. No emulation, so the arm64 build is as fast as the amd64 one.
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        arch: [amd64, arm64]
+        image: [api, gateway, agent, migrations]
+        include:
+          - {image: api, dockerfile: services/api/Dockerfile}
+          - {image: gateway, dockerfile: services/google_gateway/Dockerfile}
+          - {image: agent, dockerfile: services/agent/Dockerfile}
+          - {image: migrations, dockerfile: packages/db/Dockerfile}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SHA }}
+          persist-credentials: false
+
+      # Plain docker commands instead of third-party build actions: fewer moving parts
+      # that could be compromised (T20). The token only lives for this job.
+      - name: Log in to GHCR
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+
+      - name: Build and push
+        run: |
+          ref="${REGISTRY}/scheduling-agent-${{ matrix.image }}:sha-${SHA}-${{ matrix.arch }}"
+          docker build -f "${{ matrix.dockerfile }}" --platform "linux/${{ matrix.arch }}" \
+            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            --label "org.opencontainers.image.revision=${SHA}" \
+            -t "$ref" .
+          docker push "$ref"
+
+  publish:
+    name: Publish multi-arch images
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      api: ${{ steps.merge.outputs.api }}
+      gateway: ${{ steps.merge.outputs.gateway }}
+      agent: ${{ steps.merge.outputs.agent }}
+      migrations: ${{ steps.merge.outputs.migrations }}
+    steps:
+      - name: Log in to GHCR
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+
+      # One tag per commit pointing at both architectures; its digest is what gets deployed.
+      - name: Merge architectures
+        id: merge
+        run: |
+          for image in api gateway agent migrations; do
+            repo="${REGISTRY}/scheduling-agent-${image}"
+            docker buildx imagetools create -t "${repo}:sha-${SHA}" \
+              "${repo}:sha-${SHA}-amd64" "${repo}:sha-${SHA}-arm64"
+            digest="$(docker buildx imagetools inspect "${repo}:sha-${SHA}" --format '{{json .Manifest}}' | jq -r .digest)"
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "bad digest for $image" >&2; exit 1; }
+            echo "${image}=${repo}@${digest}" >> "$GITHUB_OUTPUT"
+          done
+
+  deploy:
+    name: Point k3d at the new images
+    needs: publish
+    runs-on: ubuntu-24.04
+    # The only job that can write to the repository, and it changes one file.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      - name: Update the environment's image digests
+        env:
+          API: ${{ needs.publish.outputs.api }}
+          GATEWAY: ${{ needs.publish.outputs.gateway }}
+          AGENT: ${{ needs.publish.outputs.agent }}
+          MIGRATIONS: ${{ needs.publish.outputs.migrations }}
+        run: |
+          file=deploy/cluster/environments/k3d/values.yaml
+          sed -i -E \
+            -e "s|^(  api: ).*|\1${API}|" \
+            -e "s|^(  gateway: ).*|\1${GATEWAY}|" \
+            -e "s|^(  agent: ).*|\1${AGENT}|" \
+            -e "s|^(  migrations: ).*|\1${MIGRATIONS}|" \
+            "$file"
+          git diff --stat
+          if git diff --quiet; then echo "no change"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Deploy ${SHA::7} to k3d"
+          # Pushes made with GITHUB_TOKEN do not start new workflow runs, so this cannot loop.
+          git pull --rebase origin main
+          git push origin HEAD:main

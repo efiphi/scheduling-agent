@@ -1,0 +1,20 @@
+# The one thing applied by hand after install.sh ("app of apps"): an Application that
+# syncs deploy/cluster/argocd/apps/, which in turn defines everything else. From then on
+# the repository is the source of truth; a change merged to main reaches the cluster
+# without anyone running kubectl.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/efiphi/scheduling-agent.git
+    targetRevision: main
+    path: deploy/cluster/argocd/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}

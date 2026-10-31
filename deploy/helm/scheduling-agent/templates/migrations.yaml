@@ -1,9 +1,10 @@
 {{- /*
-Alembic migrations as a Job, one per release revision (migrations-1, migrations-2, ...):
-a Job's pod template cannot change, so each upgrade gets a new one. Not a Helm hook: with
---wait, Helm runs post-install hooks only after every Deployment is ready, and the
-workers cannot be ready before the tables exist. So the Job starts with everything else,
-retries while Postgres is starting, and the workers restart until it is done.
+Alembic migrations as a Job, named after its image (migrations-<hash>): a Job's pod template
+cannot change, so a new image needs a new Job, and the old one is pruned. Helm and Argo CD
+both handle that, and nothing reruns while the image stays the same. Not a hook: with
+--wait, Helm runs post-install hooks only after every Deployment is ready, and the workers
+cannot be ready before the tables exist. So the Job starts with everything else and the
+workers restart until it is done.
 The only pod that holds the scheduling_owner password (its own Secret, "migrations").
 */ -}}
 apiVersion: v1
@@ -17,13 +18,12 @@ automountServiceAccountToken: false
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: migrations-{{ .Release.Revision }}
+  name: migrations-{{ .Values.images.migrations | sha256sum | trunc 8 }}
   labels:
     {{- include "sa.labels" . | nindent 4 }}
     app.kubernetes.io/name: migrations
 spec:
   backoffLimit: 10
-  ttlSecondsAfterFinished: 3600
   template:
     metadata:
       labels:

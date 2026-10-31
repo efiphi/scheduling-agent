@@ -150,7 +150,7 @@ jobs:
           done
 
   kubernetes:
-    name: Kubernetes (helm lint, schemas, chart tests, Trivy config)
+    name: Kubernetes (helm lint, schemas, chart tests, Trivy config, PromQL)
     runs-on: ubuntu-latest
     env:
       HELM_VERSION: v4.3.0
@@ -159,6 +159,9 @@ jobs:
       KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
       TRIVY_VERSION: "0.75.0"
       TRIVY_SHA256: c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f
+      # promtool, from the Prometheus release the cluster runs (step 3.7).
+      PROMETHEUS_VERSION: "3.15.0"
+      PROMETHEUS_SHA256: 2a542df32eac02ee17b9d844fb2aa1de00dafa5476579ba8a3ba862e9d572ea0
       # Schemas for the custom resources (SealedSecret, Argo CD), pinned to a commit.
       CRDS_CATALOG: https://raw.githubusercontent.com/datreeio/CRDs-catalog/3eb90d47aba8d61919d4419dd38301536e32a94b
     steps:
@@ -180,6 +183,10 @@ jobs:
           curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}"
           echo "${TRIVY_SHA256}  ${archive}" | sha256sum -c -
           tar -xzf "${archive}" trivy
+          archive="prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
+          curl -fsSLO "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/${archive}"
+          echo "${PROMETHEUS_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "${archive}" --strip-components=1 "prometheus-${PROMETHEUS_VERSION}.linux-amd64/promtool"
           echo "$HOME/bin" >> "$GITHUB_PATH"
 
       - name: helm lint (default values and the k3d environment)
@@ -213,6 +220,12 @@ jobs:
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
       - name: Chart tests
         run: uv run pytest tests/test_helm.py -v
+
+      # Every PromQL query in the dashboards and alert rules, syntax-checked (step 3.7).
+      - name: Dashboard and alert queries parse (promtool)
+        run: |
+          uv run python deploy/cluster/observability/promql_rules.py > promql.yaml
+          promtool check rules promql.yaml
 
   database:
     name: Database and Redis, roles, migrations and permissions (T3, T10, T13, T16, T24)

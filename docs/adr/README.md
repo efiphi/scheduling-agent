@@ -21,3 +21,4 @@ Each significant decision is recorded as a short ADR: what was decided, why, wha
 | [015](015-llm-provider-and-model.md) | Claude Haiku 5.5 for the agent, verified on synthetic emails first | Accepted |
 | [016](016-token-encryption.md) | Google refresh tokens encrypted with AES-256-GCM, bound to their user | Accepted |
 | [017](017-whatsapp-channel.md) | The WhatsApp channel: signed webhook, inbound verification, one template | Accepted |
+| [018](018-observability.md) | Observability with OpenTelemetry and the Grafana stack, inside the cluster | Accepted |

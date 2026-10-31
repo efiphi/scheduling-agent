@@ -143,6 +143,8 @@ kubectl -n argocd get applications
 kubectl -n observability port-forward svc/grafana 3000:80   # then http://localhost:3000
 ```
 
+In the **Scheduling agent** folder: *system* (polling, restarts, queues, errors), *agent and model* (decisions, tokens, spend against the daily cap, agent traces) and *email to meeting* (emails, actions, approvals, end-to-end traces). Six alert rules show under Alerting. Dashboards and rules come from `deploy/cluster/observability/`; after editing a dashboard's JSON run `python3 deploy/cluster/observability/render_dashboards.py`. Decisions: ADR-018.
+
 Connecting a Google account on the cluster runs inside the gateway pod, which holds its secrets:
 
 ```bash

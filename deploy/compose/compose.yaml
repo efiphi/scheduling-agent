@@ -190,7 +190,8 @@ services:
   gmail-poller:
     image: scheduling-agent-gateway:dev
     <<: [*hardening, *gateway-runtime]
-    # Every minute, every connected mailbox (ADR-003). A CronJob in Layer 2.
+    # Every minute, every connected mailbox (ADR-003). On Kubernetes a CronJob runs
+    # `--once` instead (deploy/helm/scheduling-agent/templates/cronjobs.yaml).
     command: ["python", "-m", "google_gateway.poll", "--every", "60"]
     # No HTTP server, so no health check; restart if the process dies.
     healthcheck: { disable: true }

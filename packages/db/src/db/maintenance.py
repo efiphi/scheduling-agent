@@ -4,7 +4,7 @@
 
 Skipped emails keep sender, subject and time for the daily summary, for 7 days only
 (UC-M8). google-gateway can insert them but not delete them, so the cleanup runs as
-scheduling_owner: by hand for now, as a Kubernetes CronJob in Layer 2.
+scheduling_owner: daily as the Kubernetes CronJob purge-skipped, or by hand under Compose.
 """
 
 import argparse

@@ -51,12 +51,6 @@ workloads:
     health: /healthz
     env: {GATEWAY_BIND_HOST: 0.0.0.0}
     resources: {cpu: 50m, memory: 256Mi}
-  gmail-poller:
-    image: gateway
-    secret: gateway
-    internet: true
-    command: [python, -m, google_gateway.poll, --every, "60"]
-    resources: {cpu: 50m, memory: 256Mi}
   calendar-responder:
     image: gateway
     secret: gateway
@@ -83,6 +77,32 @@ workloads:
     # The agent never talks to the database: no DB_HOST at all (ADR-011).
     database: false
     resources: {cpu: 100m, memory: 256Mi}
+
+# Scheduled jobs (cronjobs.yaml); the same fields as workloads, plus a schedule.
+timeZone: Asia/Jerusalem
+cronJobs:
+  # Every mailbox, every minute (ADR-003). In Compose the same code loops with --every.
+  gmail-poll:
+    image: gateway
+    secret: gateway
+    internet: true
+    schedule: "* * * * *"
+    command: [python, -m, google_gateway.poll, --once]
+    # Killed if still running when the next minute's run is due.
+    activeDeadlineSeconds: 55
+    startingDeadlineSeconds: 30
+    resources: {cpu: 50m, memory: 256Mi}
+  # Skipped emails are kept 7 days only (UC-M8). Runs as scheduling_owner, because no
+  # service may delete rows; its Secret is the migrations one, the only owner credential.
+  purge-skipped:
+    image: migrations
+    secret: migrations
+    redis: false
+    schedule: "17 3 * * *"
+    command: [python, -m, db.maintenance, purge-skipped]
+    activeDeadlineSeconds: 300
+    backoffLimit: 2
+    resources: {cpu: 50m, memory: 128Mi}
 
 postgres:
   storage: 2Gi

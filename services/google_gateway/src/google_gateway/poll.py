@@ -3,8 +3,8 @@
     uv run --env-file deploy/compose/.env python -m google_gateway.poll --once
     uv run --env-file deploy/compose/.env python -m google_gateway.poll --every 60
 
-`--once` is what a Kubernetes CronJob will run each minute (Layer 2); `--every` is the
-local stand-in. A per-user lock in Redis keeps overlapping runs from colliding.
+`--once` is what the Kubernetes CronJob runs each minute (gmail-poll); `--every` is the
+Compose stand-in. A per-user lock in Redis keeps overlapping runs from colliding.
 """
 
 import argparse

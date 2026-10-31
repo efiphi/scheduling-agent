@@ -56,10 +56,10 @@ def test_t22_known_token_shapes_never_reach_a_log_line(lines: io.StringIO, secre
 
 
 def test_t22_key_value_secrets_are_redacted(lines: io.StringIO) -> None:
-    logging.getLogger("x").info("url ?access_token=abc123&state=s password=hunter2")
+    logging.getLogger("x").info("url ?access_token=abc123&code=4/0Ab&mode=x password=hunter2")
     text = lines.getvalue()
-    assert "abc123" not in text and "hunter2" not in text
-    assert "state=s" in text  # only the secret is masked
+    assert "abc123" not in text and "hunter2" not in text and "4/0Ab" not in text
+    assert "mode=x" in text  # only the secrets are masked
 
 
 def test_a_line_break_in_untrusted_text_cannot_forge_a_log_line(lines: io.StringIO) -> None:
@@ -93,3 +93,15 @@ def test_text_format_for_terminals_is_redacted_too(
     log.configure("test-service")
     logging.getLogger("x").info("token %s", FAKE_META)
     assert FAKE_META not in out.getvalue() and "[redacted]" in out.getvalue()
+
+
+def test_t16_the_access_log_stays_off_so_oauth_codes_never_reach_a_log(
+    lines: io.StringIO,
+) -> None:
+    # Found on 31.10: routing uvicorn's loggers through ours had re-enabled the access log
+    # that --no-access-log turns off. The OAuth callback URL carries the code and state.
+    logging.getLogger("uvicorn.access").info(
+        '127.0.0.1 - "GET /oauth/google/callback?code=4/0AbSynthetic&state=s1 HTTP/1.1" 303'
+    )
+    logging.getLogger("uvicorn.error").info("Application startup complete.")
+    assert [r["logger"] for r in records(lines)] == ["uvicorn.error"]

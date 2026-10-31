@@ -386,3 +386,42 @@ def test_workers_send_telemetry_only_to_the_collector(objects: list[dict[str, An
     senders = {name for name, lab in labels.items() if lab.get("scheduling-agent/telemetry")}
     assert "postgres" not in senders and "redis" not in senders and "purge-skipped" not in senders
     assert {"agent", "api", "gmail-poll", "action-executor"} <= senders
+
+
+# --- Dashboards and alerts (step 3.6) ------------------------------------------------------
+
+
+def test_the_dashboards_configmap_is_rendered_from_the_json_sources() -> None:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "render_dashboards", OBSERVABILITY / "render_dashboards.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    committed = (OBSERVABILITY / "manifests/grafana-dashboards.yaml").read_text()
+    assert committed == module.render(), "run deploy/cluster/observability/render_dashboards.py"
+
+
+def test_every_dashboard_panel_reads_from_a_provisioned_data_source() -> None:
+    import json
+
+    uids = {"prometheus", "loki", "tempo"}
+    for path in sorted((OBSERVABILITY / "dashboards").glob("*.json")):
+        dashboard = json.loads(path.read_text())
+        assert dashboard["editable"] is False, path.name  # changes go through git
+        for panel in dashboard["panels"]:
+            assert panel["datasource"]["uid"] in uids, (path.name, panel["title"])
+            for target in panel["targets"]:
+                assert target["datasource"]["uid"] in uids, (path.name, panel["title"])
+
+
+def test_alert_rules_are_unique_explained_and_watch_for_silence() -> None:
+    values = yaml.safe_load((OBSERVABILITY / "grafana.yaml").read_text())
+    [group] = values["alerting"]["rules.yaml"]["groups"]
+    rules = {rule["uid"]: rule for rule in group["rules"]}
+    assert len(rules) == len(group["rules"]) >= 5
+    assert all(rule["annotations"]["summary"] for rule in rules.values())
+    # E13: if polling stops reporting at all, that is the failure itself, not "no data".
+    assert rules["sa-poll-stale"]["noDataState"] == "Alerting"

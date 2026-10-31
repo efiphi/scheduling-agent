@@ -16,6 +16,14 @@ ports:
   # The cluster's ingress (Traefik, bundled with k3s), reachable from this machine only.
   - port: 127.0.0.1:8080:80
     nodeFilters: [loadbalancer]
+  # The system's own addresses, the same as under Compose (deploy/cluster/traefik/):
+  # api, the gateway's OAuth callback, and the WhatsApp webhook. Loopback only.
+  - port: 127.0.0.1:8000:8000
+    nodeFilters: [loadbalancer]
+  - port: 127.0.0.1:8001:8001
+    nodeFilters: [loadbalancer]
+  - port: 127.0.0.1:8002:8002
+    nodeFilters: [loadbalancer]
 kubeAPI:
   hostIP: 127.0.0.1
   hostPort: "6550"

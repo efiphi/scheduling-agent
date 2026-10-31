@@ -25,6 +25,8 @@ workloads:
     secret: api
     internet: true
     port: 8000
+    # Reachable on 127.0.0.1:8000 through Traefik (ingress.yaml).
+    ingress: {entrypoint: sa-api, paths: [/]}
     command: [uvicorn, api.main:create_app, --factory, --host, 0.0.0.0, --port, "8000", --no-server-header, --no-access-log]
     health: /healthz
     resources: {cpu: 100m, memory: 256Mi}
@@ -33,6 +35,8 @@ workloads:
     secret: api
     internet: true
     port: 8002
+    # Meta's webhook only, on 127.0.0.1:8002: the Cloudflare tunnel's target (ADR-017).
+    ingress: {entrypoint: sa-webhook, paths: [/whatsapp/webhook]}
     command: [uvicorn, api.main:create_webhook_app, --factory, --host, 0.0.0.0, --port, "8002", --no-server-header, --no-access-log]
     health: /healthz
     resources: {cpu: 50m, memory: 192Mi}
@@ -47,6 +51,8 @@ workloads:
     secret: gateway
     internet: true
     port: 8001
+    # The OAuth callback only, on 127.0.0.1:8001 (ADR-010).
+    ingress: {entrypoint: sa-gateway, paths: [/oauth/google/callback]}
     command: [python, -m, google_gateway.serve]
     health: /healthz
     env: {GATEWAY_BIND_HOST: 0.0.0.0}

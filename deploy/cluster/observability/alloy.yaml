@@ -9,8 +9,14 @@ crds: {create: false}
 controller:
   type: deployment
   replicas: 1
+  # Alloy's working state (/tmp/alloy) on an emptyDir: the root filesystem is read-only.
+  volumes:
+    extra: [{name: storage, emptyDir: {sizeLimit: 256Mi}}]
 alloy:
-  mounts: {varlog: false, dockercontainers: false}
+  mounts:
+    varlog: false
+    dockercontainers: false
+    extra: [{name: storage, mountPath: /tmp/alloy}]
   extraPorts:
     - {name: otlp-grpc, port: 4317, targetPort: 4317, protocol: TCP}
     - {name: otlp-http, port: 4318, targetPort: 4318, protocol: TCP}

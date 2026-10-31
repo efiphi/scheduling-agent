@@ -6,7 +6,8 @@ loki:
   storage: {type: filesystem}
   schemaConfig:
     configs:
-      - from: "2026-11-01"
+      # Must not be in the future in UTC, or every write before that day fails with a 500.
+      - from: "2026-10-01"
         store: tsdb
         object_store: filesystem
         schema: v13

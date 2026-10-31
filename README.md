@@ -54,6 +54,7 @@ services/google_gateway/  The only holder of Google tokens: OAuth connect, Gmail
 packages/db/              SQLAlchemy models, Alembic migrations (RLS, grants), owner tools
 packages/shared/          Messages between the services (Pydantic StrictModel)
 web/                      React + TypeScript web app (Hebrew, right-to-left, mobile-first)
+deploy/k3d/               Local Kubernetes cluster (k3s in Docker) for Layer 2
 deploy/compose/           Local stack: Postgres, Redis, api, google-gateway, gmail-poller,
                           calendar-responder, agent;
                           database roles and their tests
@@ -105,6 +106,13 @@ Prove the database roles hold up (15 attack-style checks):
 
 ```bash
 docker compose -f deploy/compose/compose.yaml exec -T postgres sh /tests/test-roles.sh
+```
+
+**Kubernetes (Layer 2, in progress):** [k3d](https://k3d.io) runs k3s inside Docker, bound to `127.0.0.1`.
+
+```bash
+k3d cluster create --config deploy/k3d/cluster.yaml
+kubectl get nodes
 ```
 
 **Web app:**

@@ -1,17 +1,25 @@
 #!/usr/bin/env bash
-# Create the chart's Kubernetes Secrets from deploy/compose/.env, for the local k3d cluster.
-#   deploy/k3d/create-secrets.sh            # namespace "scheduling-agent"
+# Seal the chart's Secrets from deploy/compose/.env into SealedSecrets that can be committed
+# (ADR-008). Run once per cluster, and again whenever a value in .env changes:
+#   deploy/k3d/seal-secrets.sh     # writes deploy/cluster/secrets/k3d/*.yaml
 #
 # Each Secret gets only the keys its component needs, the same split as Compose
 # (invariants 1, 7, 8): the agent never sees a database password or a Google key, the api
-# never sees a Google token key. Values are never printed or passed on a command line
-# (where `ps` could show them): they go through a private temporary file.
-# Step 2.3 replaces this with Sealed Secrets that can live in git.
+# never sees a Google token key. Plain values never reach the repository, the terminal or
+# a command line (where `ps` could show them): they go through a private temporary file
+# and a pipe straight into kubeseal, which encrypts them with the cluster's public key.
+#
+# Only this cluster's Sealed Secrets controller can decrypt the output. The default
+# "strict" scope also binds each one to its name and namespace, so a SealedSecret for the
+# agent cannot be renamed into the gateway's Secret. Losing the cluster loses its key; then
+# run this again (nothing to back up: .env is the source).
 set -euo pipefail
 
 ENV_FILE="${ENV_FILE:-deploy/compose/.env}"
 NAMESPACE="${NAMESPACE:-scheduling-agent}"
+OUT_DIR="${OUT_DIR:-deploy/cluster/secrets/k3d}"
 [[ -f "$ENV_FILE" ]] || { echo "missing $ENV_FILE" >&2; exit 1; }
+mkdir -p "$OUT_DIR"
 
 workdir="$(mktemp -d)"
 chmod 700 "$workdir"
@@ -21,7 +29,14 @@ value() {  # value KEY -> the value from .env, empty if missing
   grep -E "^$1=" "$ENV_FILE" | tail -n 1 | cut -d= -f2- || true
 }
 
-make_secret() {  # make_secret NAME KEY... : a Secret with those keys (missing ones skipped)
+seal() {  # seal NAME ENV_FILE
+  kubectl create secret generic "$1" --namespace "$NAMESPACE" \
+    --from-env-file="$2" --dry-run=client -o yaml \
+    | kubeseal --controller-namespace kube-system --format yaml > "$OUT_DIR/$1.yaml"
+  echo "$OUT_DIR/$1.yaml: $(wc -l < "$2" | tr -d ' ') keys"
+}
+
+make_secret() {  # make_secret NAME KEY... : a SealedSecret with those keys (missing ones skipped)
   local name="$1"; shift
   local file="$workdir/$name.env"
   : > "$file"
@@ -29,12 +44,8 @@ make_secret() {  # make_secret NAME KEY... : a Secret with those keys (missing o
     local v; v="$(value "$key")"
     [[ -n "$v" ]] && printf '%s=%s\n' "$key" "$v" >> "$file"
   done
-  kubectl create secret generic "$name" --namespace "$NAMESPACE" \
-    --from-env-file="$file" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-  echo "secret/$name: $(wc -l < "$file" | tr -d ' ') keys"
+  seal "$name" "$file"
 }
-
-kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 || kubectl create namespace "$NAMESPACE" >/dev/null
 
 make_secret postgres POSTGRES_PASSWORD OWNER_DB_PASSWORD API_DB_PASSWORD GATEWAY_DB_PASSWORD
 make_secret redis REDIS_PASSWORD
@@ -52,6 +63,4 @@ import os, urllib.parse
 p = urllib.parse.quote(os.environ["OWNER_DB_PASSWORD"], safe="")
 print(f"MIGRATION_DATABASE_URL=postgresql+psycopg://scheduling_owner:{p}@postgres:5432/scheduling_agent")
 ' > "$workdir/migrations.env"
-kubectl create secret generic migrations --namespace "$NAMESPACE" \
-  --from-env-file="$workdir/migrations.env" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-echo "secret/migrations: 1 key"
+seal migrations "$workdir/migrations.env"

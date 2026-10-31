@@ -34,9 +34,6 @@ spec:
         {{- include "sa.labels" $ | nindent 8 }}
         app.kubernetes.io/name: {{ $name }}
         app.kubernetes.io/component: {{ $w.image }}
-      annotations:
-        # Restart the pod when its Secret's name changes; content changes come with 2.3.
-        checksum/secret-name: {{ $w.secret | sha256sum | trunc 16 }}
     spec:
       serviceAccountName: {{ $name }}
       automountServiceAccountToken: false

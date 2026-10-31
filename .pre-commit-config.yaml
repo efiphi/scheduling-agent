@@ -19,6 +19,8 @@ repos:
       - id: check-yaml
         # Helm templates are YAML only after rendering; helm lint and tests/test_helm.py check them.
         exclude: ^deploy/helm/.*/templates/
+        # Kubernetes manifests often hold several objects, separated by ---.
+        args: [--allow-multiple-documents]
       - id: end-of-file-fixer
       - id: trailing-whitespace
 

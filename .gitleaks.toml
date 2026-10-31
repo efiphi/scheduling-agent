@@ -1,0 +1,15 @@
+# gitleaks: the default rules, plus one narrow exception.
+[extend]
+useDefault = true
+
+# Sealed Secrets ciphertext (ADR-008) is high-entropy by design, so the generic rule flags
+# it. Allowed only when BOTH hold: the file is under deploy/cluster/secrets/, and the line is
+# one key with a long base64 value starting with "Ag" (the sealed format's version bytes).
+# A plain password pasted there is short or not base64-shaped, so it is still caught;
+# tests/test_helm.py separately checks every file there is a SealedSecret with no plain data.
+[[allowlists]]
+description = "Sealed Secrets ciphertext"
+condition = "AND"
+paths = ['''^deploy/cluster/secrets/[^/]+/[^/]+\.yaml$''']
+regexTarget = "line"
+regexes = ['''^\s+[A-Z][A-Z0-9_]*: Ag[A-Za-z0-9+/]{300,}={0,2}$''']

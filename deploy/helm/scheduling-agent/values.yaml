@@ -1,6 +1,7 @@
 # Values for the scheduling agent chart. Secrets are NOT here: each component reads a
-# Kubernetes Secret named in `secret:` below, created outside the chart (step 2.3 moves
-# them to Sealed Secrets, ADR-008). Every component gets only its own secret.
+# Kubernetes Secret named in `secret:` below, which the Sealed Secrets controller decrypts
+# from deploy/cluster/secrets/ (ADR-008). Every component gets only its own secret.
+# Pods read a Secret when they start: after re-sealing, `kubectl rollout restart`.
 
 images:
   # Local development: images built by Docker Compose and loaded with `k3d image import`.

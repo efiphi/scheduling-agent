@@ -104,5 +104,75 @@ def test_adr_011_the_agent_is_not_told_where_the_database_is(objects: list[dict[
 
 @needs_helm
 def test_no_secret_values_in_the_chart(objects: list[dict[str, Any]]) -> None:
-    # Secrets are created outside the chart (create-secrets.sh, Sealed Secrets in 2.3).
+    # Secrets live outside the chart, sealed, in deploy/cluster/secrets/ (ADR-008).
     assert [o for o in objects if o["kind"] == "Secret"] == []
+
+
+# --- Sealed Secrets (ADR-008) --------------------------------------------------------------
+
+SEALED = ROOT / "deploy/cluster/secrets/k3d"
+
+# The only keys each component's Secret may hold: the same split as Compose. A key added
+# to the wrong Secret (say, a Google key in the agent's) fails here, before any cluster.
+ALLOWED_KEYS = {
+    "postgres": {
+        "POSTGRES_PASSWORD",
+        "OWNER_DB_PASSWORD",
+        "API_DB_PASSWORD",
+        "GATEWAY_DB_PASSWORD",
+    },
+    "redis": {"REDIS_PASSWORD"},
+    "api": {
+        "API_DB_PASSWORD",
+        "REDIS_PASSWORD",
+        "GOOGLE_LOGIN_CLIENT_ID",
+        "GOOGLE_LOGIN_CLIENT_SECRET",
+        "WEB_APP_URL",
+        "WHATSAPP_ACCESS_TOKEN",
+        "WHATSAPP_PHONE_NUMBER_ID",
+        "WHATSAPP_APP_SECRET",
+        "WHATSAPP_VERIFY_TOKEN",
+        "WHATSAPP_NOTIFY_TEMPLATE",
+    },
+    "gateway": {
+        "GATEWAY_DB_PASSWORD",
+        "REDIS_PASSWORD",
+        "GOOGLE_CONNECT_CLIENT_ID",
+        "GOOGLE_CONNECT_CLIENT_SECRET",
+        "TOKEN_ENCRYPTION_KEYS",
+    },
+    "agent": {"REDIS_PASSWORD", "ANTHROPIC_API_KEY", "AGENT_DAILY_BUDGET_USD"},
+    "migrations": {"MIGRATION_DATABASE_URL"},
+}
+
+
+def sealed() -> dict[str, dict[str, Any]]:
+    docs = [yaml.safe_load(p.read_text()) for p in sorted(SEALED.glob("*.yaml"))]
+    return {d["metadata"]["name"]: d for d in docs}
+
+
+def test_t17_committed_secrets_are_sealed_never_plain() -> None:
+    for name, doc in sealed().items():
+        assert doc["kind"] == "SealedSecret", name
+        assert "data" not in doc and "stringData" not in doc, name
+        # Strict scope: bound to its own name and namespace (no scope annotations).
+        annotations = doc["metadata"].get("annotations") or {}
+        assert not any("sealedsecrets.bitnami.com/" in a for a in annotations), name
+        assert doc["metadata"]["namespace"] == "scheduling-agent", name
+
+
+def test_t13_invariant_1_each_sealed_secret_holds_only_its_components_keys() -> None:
+    docs = sealed()
+    assert set(docs) == set(ALLOWED_KEYS)
+    for name, doc in docs.items():
+        assert set(doc["spec"]["encryptedData"]) <= ALLOWED_KEYS[name], name
+    # The two that matter most, spelled out: the agent cannot reach the database or Google.
+    agent = set(docs["agent"]["spec"]["encryptedData"])
+    assert not any(k.endswith("DB_PASSWORD") or k.startswith("GOOGLE_") for k in agent)
+    assert "TOKEN_ENCRYPTION_KEYS" not in set(docs["api"]["spec"]["encryptedData"])
+
+
+@needs_helm
+def test_every_secret_the_chart_reads_is_sealed(objects: list[dict[str, Any]]) -> None:
+    used = set().union(*(secrets_of(spec) for spec in pod_specs(objects).values()))
+    assert used == set(sealed())

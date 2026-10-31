@@ -37,11 +37,12 @@ from google_gateway.mail_store import MailStore
 from google_gateway.pending_action import content_hash, event_payload, expires_at, reply_payload
 from google_gateway.policy_guard import GuardInput, check_event, check_reply
 from google_gateway.token_crypto import EncryptedToken
-from shared import log
+from shared import log, tracing
 from shared.messages import AgentPlan, ConfirmSlot, Interval, ProposeSlots
 from shared.streams import AGENT_PLANS, NOTIFICATIONS, STREAM_MAX_LENGTH
 
 logger = logging.getLogger(__name__)
+_tracer = tracing.tracer(__name__)
 
 GROUP = "gateway"
 BLOCK_MS = 5_000
@@ -230,7 +231,7 @@ def redis_notifier(redis: Redis) -> Callable[[UUID, UUID], None]:
     def notify(user_id: UUID, action_id: UUID) -> None:
         redis.xadd(
             NOTIFICATIONS,
-            {"user_id": str(user_id), "action_id": str(action_id)},
+            tracing.inject({"user_id": str(user_id), "action_id": str(action_id)}),
             maxlen=STREAM_MAX_LENGTH,
             approximate=True,
         )
@@ -248,7 +249,13 @@ def run_once(redis: Redis, handler: PlanHandler, consumer: str) -> int:
     except ValidationError:
         logger.error("invalid plan dropped")
     else:
-        outcome = handler.handle(plan)
+        with _tracer.start_as_current_span(
+            "plan.handle",
+            context=tracing.extract(fields),
+            attributes={"task.id": str(plan.task_id)},
+        ) as span:
+            outcome = handler.handle(plan)
+            span.set_attribute("plan.outcome", outcome)
         logger.info("plan handled: task_id=%s outcome=%s", plan.task_id, outcome)
     redis.xack(AGENT_PLANS, GROUP, message_id)
     return 1
@@ -270,6 +277,7 @@ def main() -> None:
 
     # JSON lines with the trace id; quiet HTTP clients and redaction (shared.log, T22).
     log.configure("plan-handler")
+    tracing.configure("plan-handler")
     config = GatewayConfig.from_env()
     redis, handler = redis_client(config), plan_handler(config)
     ensure_group(redis)

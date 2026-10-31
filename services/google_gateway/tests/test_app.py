@@ -6,10 +6,13 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from gateway_fakes import CODE, USER_EMAIL, FakeGoogle, FakeRepo, FakeStates
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from google_gateway.app import CALLBACK_PATH, RESULT_PATH, create_app
 from google_gateway.connection import ConnectFlow
 from google_gateway.token_crypto import KEY_BYTES, TokenCipher
+from shared import tracing
 
 
 @pytest.fixture
@@ -67,3 +70,45 @@ def test_no_api_docs_are_exposed(flow: ConnectFlow) -> None:
     client = TestClient(create_app(flow))
     for path in ("/docs", "/redoc", "/openapi.json"):
         assert client.get(path).status_code == 404
+
+
+# --- Tracing (Layer 3, T16, T22) -------------------------------------------------------------
+
+_SPANS = InMemorySpanExporter()
+
+
+@pytest.fixture
+def spans() -> InMemorySpanExporter:
+    provider = tracing.configure("google-gateway")
+    if not getattr(provider, "_gateway_test_exporter", False):
+        provider.add_span_processor(SimpleSpanProcessor(_SPANS))
+        provider._gateway_test_exporter = True  # type: ignore[attr-defined]
+    _SPANS.clear()
+    return _SPANS
+
+
+def test_t16_the_oauth_callback_is_never_traced(
+    flow: ConnectFlow, spans: InMemorySpanExporter
+) -> None:
+    # Its query string holds the authorization code and state; a span would record it.
+    client = TestClient(create_app(flow))
+    client.get(CALLBACK_PATH, params={"state": start(flow), "code": CODE}, follow_redirects=False)
+    recorded = " ".join(str(s.attributes) for s in spans.get_finished_spans())
+    assert CODE not in recorded
+    assert not [s for s in spans.get_finished_spans() if CALLBACK_PATH in str(s.attributes)]
+
+
+def test_a_traceparent_header_from_outside_is_ignored(
+    flow: ConnectFlow, spans: InMemorySpanExporter
+) -> None:
+    outside = "ab" * 16
+    client = TestClient(create_app(flow))
+    client.get(
+        RESULT_PATH,
+        params={"outcome": "connected"},
+        headers={"traceparent": f"00-{outside}-{'cd' * 8}-01"},
+    )
+    finished = spans.get_finished_spans()
+    assert finished  # the result page is traced...
+    assert all(f"{s.context.trace_id:032x}" != outside for s in finished)  # ...in its own trace
+    assert all(s.parent is None or s.parent.trace_id != int(outside, 16) for s in finished)

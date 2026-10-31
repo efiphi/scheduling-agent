@@ -13,7 +13,7 @@ import time
 
 from google_gateway.config import GatewayConfig
 from google_gateway.wiring import mailbox_poller
-from shared import log
+from shared import log, tracing
 
 MIN_INTERVAL_SECONDS = 30
 
@@ -29,6 +29,7 @@ def main(argv: list[str]) -> None:
 
     # JSON lines with the trace id; quiet HTTP clients and redaction (shared.log, T22).
     log.configure("gmail-poll")
+    tracing.configure("gmail-poll")
     poller = mailbox_poller(GatewayConfig.from_env())
     while True:
         started = time.monotonic()

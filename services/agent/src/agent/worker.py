@@ -34,7 +34,7 @@ from redis.exceptions import TimeoutError as RedisTimeoutError
 from agent.extraction import MODEL, AnthropicFormFiller, Usage
 from agent.free_busy import RedisFreeBusyClient
 from agent.graph import AgentState, build_graph, run
-from shared import log
+from shared import log, tracing
 from shared.messages import EmailTask
 from shared.streams import (
     AGENT_PLANS,
@@ -44,6 +44,7 @@ from shared.streams import (
 )
 
 logger = logging.getLogger(__name__)
+_tracer = tracing.tracer(__name__)
 
 GROUP = "agent"
 DEAD_LETTER = "agent:dead-letter"
@@ -140,14 +141,18 @@ class Worker:
             self._redis.xack(EMAIL_TASKS, GROUP, message_id)
             logger.error("invalid task moved to dead letter: message_id=%s", message_id)
             return
-        plan, usage = run(self._graph, task)
-        self._cap.add(cost_usd(usage))
-        self._redis.xadd(
-            AGENT_PLANS,
-            {"plan": plan.model_dump_json()},
-            maxlen=STREAM_MAX_LENGTH,
-            approximate=True,
-        )
+        with _tracer.start_as_current_span(
+            "agent.task", context=tracing.extract(fields), attributes={"task.id": str(task.task_id)}
+        ) as span:
+            plan, usage = run(self._graph, task)
+            self._cap.add(cost_usd(usage))
+            span.set_attribute("agent.decision", plan.decision.kind)
+            self._redis.xadd(
+                AGENT_PLANS,
+                tracing.inject({"plan": plan.model_dump_json()}),
+                maxlen=STREAM_MAX_LENGTH,
+                approximate=True,
+            )
         self._redis.xack(EMAIL_TASKS, GROUP, message_id)
         # Ids and the decision kind only: never email content (T22).
         logger.info(
@@ -172,6 +177,7 @@ def _first(entries: Any) -> tuple[str, dict[bytes, bytes]] | None:
 def main() -> None:
     # JSON lines with the trace id; quiet HTTP clients and redaction (shared.log, T22).
     log.configure("agent")
+    tracing.configure("agent")
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise SystemExit("ANTHROPIC_API_KEY is not set (see deploy/compose/.env.example)")
 

@@ -30,6 +30,7 @@ from google_gateway.gmail import GmailReader, HistoryExpired, MessageMeta, Messa
 from google_gateway.mail_filter import Decision, classify, sender_address
 from google_gateway.mail_store import MailStore
 from google_gateway.token_crypto import EncryptedToken
+from shared import tracing
 from shared.messages import (
     MAX_BODY_CHARS,
     MAX_SUBJECT_CHARS,
@@ -39,6 +40,7 @@ from shared.messages import (
 )
 
 logger = logging.getLogger(__name__)
+_tracer = tracing.tracer(__name__)
 
 # After an expired history id, look back this far. Anything older is not "new" anymore.
 RESYNC_DAYS = 1
@@ -110,6 +112,17 @@ class MailboxPoller:
     def _handle(self, user_id: UUID, user_email: str, ref: MessageRef, gmail: GmailReader) -> str:
         if self.coordination.already_handled(user_id, ref.message_id):
             return "duplicate"
+        # Each new email starts its own trace; every later hop continues it (shared.tracing).
+        with _tracer.start_as_current_span(
+            "email.received", context=tracing.new_trace(), attributes={"user.id": str(user_id)}
+        ) as span:
+            outcome = self._handle_new(user_id, user_email, ref, gmail)
+            span.set_attribute("email.outcome", outcome)
+            return outcome
+
+    def _handle_new(
+        self, user_id: UUID, user_email: str, ref: MessageRef, gmail: GmailReader
+    ) -> str:
         meta = gmail.message_metadata(ref.message_id)
         tracked = self.store.is_tracked_thread(user_id, meta.thread_id)
         body = _Body(gmail, ref.message_id)

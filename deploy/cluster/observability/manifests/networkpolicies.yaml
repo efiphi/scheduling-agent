@@ -1,7 +1,7 @@
 # Who may talk to the monitoring tools (T21). Ingress is denied by default; each tool
 # accepts only the components that write to or read from it:
 #
-#   scheduling-agent pods -> alloy:4317/4318   OTLP (steps 3.3–3.5)
+#   scheduling-agent pods -> alloy:4318   OTLP/HTTP, labeled pods only (steps 3.3–3.5)
 #   alloy                 -> loki, tempo, prometheus   writes
 #   grafana               -> loki, tempo, prometheus   reads
 #   prometheus            -> kube-state-metrics
@@ -23,9 +23,11 @@ spec:
   podSelector: {matchLabels: {app.kubernetes.io/name: alloy}}
   policyTypes: [Ingress]
   ingress:
+    # Only pods the chart labels for telemetry; an unlabeled pod there cannot send.
     - from:
         - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: scheduling-agent}}
-      ports: [{protocol: TCP, port: 4317}, {protocol: TCP, port: 4318}]
+          podSelector: {matchLabels: {scheduling-agent/telemetry: "true"}}
+      ports: [{protocol: TCP, port: 4318}]
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

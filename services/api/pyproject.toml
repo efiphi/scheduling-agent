@@ -12,6 +12,7 @@ dependencies = [
     "fastapi",
     "google-auth",
     "httpx2",
+    "opentelemetry-instrumentation-fastapi",
     "redis",
     "shared",
     "uvicorn",

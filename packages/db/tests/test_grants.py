@@ -93,6 +93,21 @@ def test_api_cannot_create_pending_actions(api: Engine, seed: Any) -> None:
         )
 
 
+def test_a_pending_action_can_carry_its_trace_and_nothing_else(gateway: Engine, seed: Any) -> None:
+    # Migration 0006: the column accepts a W3C traceparent only, so it cannot become a
+    # place to stash email content or anything else.
+    insert = (
+        "INSERT INTO app.pending_actions"
+        " (user_id, kind, payload, content_hash, expires_at, trace_parent)"
+        " VALUES (:u, 'block_time', '{}', 'x', now() + interval '1 hour', :t)"
+    )
+    good = "00-" + "ab" * 16 + "-" + "cd" * 8 + "-01"
+    assert run(gateway, seed.user_a, insert, u=seed.user_a, t=good) == 1
+    for bad in ("Meeting with Dana tomorrow", good.upper(), good + " ", "01" + good[2:]):
+        with pytest.raises(IntegrityError, match="pending_actions_trace_parent_format"):
+            run(gateway, seed.user_a, insert, u=seed.user_a, t=bad)
+
+
 @pytest.mark.parametrize("role", ["api", "gateway"])
 def test_no_service_can_delete_actions(
     role: str, seed: Any, request: pytest.FixtureRequest

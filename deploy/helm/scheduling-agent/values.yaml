@@ -104,11 +104,17 @@ cronJobs:
     image: migrations
     secret: migrations
     redis: false
+    # The migrations image has no OpenTelemetry; this job only logs a count.
+    telemetry: false
     schedule: "17 3 * * *"
     command: [python, -m, db.maintenance, purge-skipped]
     activeDeadlineSeconds: 300
     backoffLimit: 2
     resources: {cpu: 50m, memory: 128Mi}
+
+# Where traces and metrics go (Layer 3): Alloy, in the observability namespace.
+telemetry:
+  endpoint: http://alloy.observability.svc.cluster.local:4318
 
 postgres:
   storage: 2Gi

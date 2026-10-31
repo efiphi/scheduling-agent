@@ -34,7 +34,7 @@ from redis.exceptions import TimeoutError as RedisTimeoutError
 from agent.extraction import MODEL, AnthropicFormFiller, Usage
 from agent.free_busy import RedisFreeBusyClient
 from agent.graph import AgentState, build_graph, run
-from shared import log, tracing
+from shared import log, metrics, tracing
 from shared.messages import EmailTask
 from shared.streams import (
     AGENT_PLANS,
@@ -74,6 +74,14 @@ class SpendCap:
     def exhausted(self) -> bool:
         spent = self._redis.get(self._key())
         return spent is not None and float(spent) >= self._budget
+
+    def spent_today(self) -> float:
+        spent = self._redis.get(self._key())
+        return 0.0 if spent is None else float(spent)
+
+    @property
+    def budget(self) -> float:
+        return self._budget
 
     def add(self, usd: float) -> None:
         key = self._key()
@@ -144,8 +152,14 @@ class Worker:
         with _tracer.start_as_current_span(
             "agent.task", context=tracing.extract(fields), attributes={"task.id": str(task.task_id)}
         ) as span:
+            started = time.monotonic()
             plan, usage = run(self._graph, task)
+            metrics.AGENT_TASK_DURATION.record(time.monotonic() - started)
             cost = cost_usd(usage)
+            metrics.AGENT_DECISIONS.add(1, {"decision": plan.decision.kind})
+            metrics.LLM_TOKENS.add(usage.input_tokens, {"direction": "input", "model": MODEL})
+            metrics.LLM_TOKENS.add(usage.output_tokens, {"direction": "output", "model": MODEL})
+            metrics.LLM_COST.add(cost, {"model": MODEL})
             self._cap.add(cost)
             span.set_attribute("agent.decision", plan.decision.kind)
             span.set_attribute("agent.cost_usd", cost)
@@ -183,6 +197,7 @@ def main() -> None:
     # JSON lines with the trace id; quiet HTTP clients and redaction (shared.log, T22).
     log.configure("agent")
     tracing.configure("agent")
+    metrics.configure("agent")
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise SystemExit("ANTHROPIC_API_KEY is not set (see deploy/compose/.env.example)")
 
@@ -195,8 +210,17 @@ def main() -> None:
     clock = lambda: datetime.now(UTC)  # noqa: E731
     graph = build_graph(AnthropicFormFiller(), RedisFreeBusyClient(redis), clock)
     budget = float(os.environ.get("AGENT_DAILY_BUDGET_USD", DEFAULT_DAILY_BUDGET_USD))
-    worker = Worker(redis, graph, SpendCap(redis, budget, clock), consumer=socket.gethostname())
+    cap = SpendCap(redis, budget, clock)
+    worker = Worker(redis, graph, cap, consumer=socket.gethostname())
     worker.ensure_group()
+    # Today's spend next to the cap, so a dashboard shows how close the agent is to pausing.
+    metrics.observe(
+        "sa.llm.spent_today_usd",
+        "Model spend since midnight UTC",
+        lambda: [(cap.spent_today(), {})],
+    )
+    metrics.observe("sa.llm.daily_budget_usd", "The daily spend cap (T24)", lambda: [(budget, {})])
+    metrics.observe_stream_backlog(redis, EMAIL_TASKS, GROUP)
     logger.info("agent started: model=%s daily_budget_usd=%.2f", MODEL, budget)
     while True:
         try:

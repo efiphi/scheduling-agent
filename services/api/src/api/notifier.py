@@ -19,7 +19,7 @@ from redis.exceptions import ResponseError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from api.whatsapp import Notifier
-from shared import log, tracing
+from shared import log, metrics, tracing
 from shared.streams import NOTIFICATIONS
 
 logger = logging.getLogger(__name__)
@@ -66,10 +66,12 @@ def main() -> None:
     # JSON lines with the trace id; quiet HTTP clients and redaction (shared.log, T22).
     log.configure("notifier")
     tracing.configure("notifier")
+    metrics.configure("notifier")
     deps = deps_from_env()
     if deps.whatsapp is None or deps.notifier is None:
         raise SystemExit("WhatsApp is not configured (see deploy/compose/.env.example)")
     ensure_group(deps.redis)
+    metrics.observe_stream_backlog(deps.redis, NOTIFICATIONS, GROUP)
     while True:
         try:
             run_once(deps.redis, deps.notifier, socket.gethostname())

@@ -34,7 +34,7 @@ from api.whatsapp import (
     parse_messages,
     valid_signature,
 )
-from shared import log, tracing
+from shared import log, metrics, tracing
 from shared.schema import StrictModel
 from shared.streams import APPROVED_ACTIONS, STREAM_MAX_LENGTH
 
@@ -151,6 +151,7 @@ def _configure_logging() -> None:
     # through one JSON handler (shared.log); our lines hold outcomes and ids only (T22).
     log.configure("api")
     tracing.configure("api")
+    metrics.configure("api")
 
 
 def create_app(deps: Deps | None = None) -> FastAPI:

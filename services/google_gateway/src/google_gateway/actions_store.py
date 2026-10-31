@@ -17,7 +17,7 @@ from sqlalchemy.sql.expression import bindparam
 
 from db.session import set_user_context
 from google_gateway.events import write_audit
-from shared import tracing
+from shared import metrics, tracing
 from shared.messages import Interval
 
 
@@ -162,6 +162,7 @@ class SqlActionStore:
             ).scalar_one_or_none()
             if action_id is None:
                 return None
+            metrics.ACTIONS_CREATED.add(1, {"kind": kind})
             conn.execute(
                 text(
                     "UPDATE app.threads SET state = 'proposed', updated_at = now()"

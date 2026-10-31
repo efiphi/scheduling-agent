@@ -26,6 +26,7 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager, suppress
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -45,7 +46,7 @@ from google_gateway.gmail_sender import MailSender, build_message
 from google_gateway.mail_store import MailStore
 from google_gateway.pending_action import content_hash
 from google_gateway.token_crypto import EncryptedToken
-from shared import log, tracing
+from shared import log, metrics, tracing
 from shared.messages import Interval
 from shared.streams import APPROVED_ACTIONS
 
@@ -77,6 +78,7 @@ class Approved:
     participants: tuple[str, ...]
     # The email's trace (shared.tracing), stored with the action when it was created.
     trace_parent: str | None = None
+    created_at: datetime | None = None
 
 
 class ExecutionStore(Protocol):
@@ -129,6 +131,10 @@ class Executor:
         ) as span:
             outcome = self._execute_loaded(user_id, action_id, action)
             span.set_attribute("action.outcome", outcome)
+            metrics.ACTIONS_EXECUTED.add(1, {"outcome": outcome})
+            if outcome == "executed" and action.created_at is not None:
+                wait = (datetime.now(UTC) - action.created_at).total_seconds()
+                metrics.APPROVAL_WAIT.record(max(0.0, wait))
             return outcome
 
     def _execute_loaded(self, user_id: UUID, action_id: UUID, action: Approved) -> str:
@@ -249,7 +255,7 @@ class SqlExecutionStore:
                 text(
                     "SELECT a.status, a.thread_id, a.payload, a.content_hash, a.idempotency_key,"
                     " p.content_hash, p.used_at IS NOT NULL, u.status = 'active', t.participants,"
-                    " a.trace_parent"
+                    " a.trace_parent, a.created_at"
                     " FROM app.pending_actions AS a"
                     " JOIN app.users AS u ON u.user_id = a.user_id"
                     " JOIN app.threads AS t ON t.user_id = a.user_id AND t.thread_id = a.thread_id"
@@ -272,6 +278,7 @@ class SqlExecutionStore:
             user_active=bool(row[7]),
             participants=tuple(row[8]),
             trace_parent=row[9],
+            created_at=row[10],
         )
 
     def claim(self, user_id: UUID, action_id: UUID) -> bool:
@@ -410,9 +417,11 @@ def main() -> None:
     # JSON lines with the trace id; quiet HTTP clients and redaction (shared.log, T22).
     log.configure("action-executor")
     tracing.configure("action-executor")
+    metrics.configure("action-executor")
     config = GatewayConfig.from_env()
     redis = redis_client(config)
     ensure_group(redis)
+    metrics.observe_stream_backlog(redis, APPROVED_ACTIONS, GROUP)
     worker = executor(config)
     while True:
         try:

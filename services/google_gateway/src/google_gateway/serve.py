@@ -14,7 +14,7 @@ import uvicorn
 from google_gateway.app import create_app
 from google_gateway.config import GatewayConfig
 from google_gateway.wiring import connect_flow
-from shared import log, tracing
+from shared import log, metrics, tracing
 
 # Local only by default. The container sets 0.0.0.0 and Compose publishes the port on
 # 127.0.0.1, so the callback is still unreachable from the network.
@@ -26,6 +26,7 @@ def main() -> None:
     # JSON lines with the trace id; quiet HTTP clients and redaction (shared.log, T22).
     log.configure("google-gateway")
     tracing.configure("google-gateway")
+    metrics.configure("google-gateway")
     app = create_app(connect_flow(GatewayConfig.from_env()))
     uvicorn.run(app, host=HOST, port=PORT, access_log=False, server_header=False)
 

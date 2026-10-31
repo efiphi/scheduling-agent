@@ -4,6 +4,11 @@ The message is built with the standard library's email package, whose default po
 refuses a header value containing a line break, a second guard against header injection
 after email_template.py removed them (T1).
 
+Hebrew emails get an HTML alternative marked right-to-left: plain text has no direction,
+so mail clients showed it left-to-right. The HTML is derived by code from the approved
+text only, with every character escaped, so it adds no content and no markup from the
+model (T1); the approval stays bound to the text, which the HTML mirrors exactly.
+
 Idempotency (E8): the Message-ID is derived from the action's idempotency key. Before
 sending, the executor asks Gmail whether a message with that Message-ID already exists. So
 a retry after a crash between "sent" and "recorded as sent" never sends twice.
@@ -12,6 +17,7 @@ a retry after a crash between "sent" and "recorded as sent" never sends twice.
 import base64
 from email.message import EmailMessage
 from email.policy import SMTP
+from html import escape
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -24,8 +30,23 @@ def message_id(idempotency_key: UUID) -> str:
     return f"<{idempotency_key}@{MESSAGE_ID_DOMAIN}>"
 
 
+def rtl_html(body: str) -> str:
+    """The approved text as right-to-left HTML: escaped line by line, nothing added."""
+    lines = "<br>".join(escape(line) for line in body.split("\n"))
+    return (
+        '<html><body><div dir="rtl" style="text-align:right;font-family:Arial,sans-serif">'
+        f"{lines}</div></body></html>"
+    )
+
+
 def build_message(
-    *, to: list[str], subject: str, body: str, idempotency_key: UUID, in_reply_to: str | None
+    *,
+    to: list[str],
+    subject: str,
+    body: str,
+    idempotency_key: UUID,
+    in_reply_to: str | None,
+    language: str = "en",
 ) -> bytes:
     message = EmailMessage(policy=SMTP)
     message["To"] = ", ".join(to)  # From is set by Gmail: the authenticated mailbox
@@ -36,6 +57,8 @@ def build_message(
         message["In-Reply-To"] = in_reply_to
         message["References"] = in_reply_to
     message.set_content(body)
+    if language == "he":
+        message.add_alternative(rtl_html(body), subtype="html")
     return message.as_bytes()
 
 

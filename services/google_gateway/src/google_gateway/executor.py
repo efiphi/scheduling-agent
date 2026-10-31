@@ -160,6 +160,7 @@ class Executor:
             body=str(payload["body"]),
             idempotency_key=action.idempotency_key,
             in_reply_to=sender.latest_message_id(str(payload["gmail_thread_id"])),
+            language=str(payload.get("language", "en")),
         )
         return sender.send(raw, str(payload["gmail_thread_id"]))
 

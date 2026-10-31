@@ -1,0 +1,59 @@
+{{- /*
+Alembic migrations as a Job, one per release revision (migrations-1, migrations-2, ...):
+a Job's pod template cannot change, so each upgrade gets a new one. Not a Helm hook: with
+--wait, Helm runs post-install hooks only after every Deployment is ready, and the
+workers cannot be ready before the tables exist. So the Job starts with everything else,
+retries while Postgres is starting, and the workers restart until it is done.
+The only pod that holds the scheduling_owner password (its own Secret, "migrations").
+*/ -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: migrations
+  labels:
+    {{- include "sa.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrations-{{ .Release.Revision }}
+  labels:
+    {{- include "sa.labels" . | nindent 4 }}
+    app.kubernetes.io/name: migrations
+spec:
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        {{- include "sa.labels" . | nindent 8 }}
+        app.kubernetes.io/name: migrations
+    spec:
+      restartPolicy: Never
+      serviceAccountName: migrations
+      automountServiceAccountToken: false
+      # No automatic SERVICE_HOST/SERVICE_PORT variables for every Service: they collide
+      # with our own (REDIS_PORT=tcp://...) and tell a pod about services it never uses.
+      enableServiceLinks: false
+      securityContext:
+        {{- include "sa.podSecurity" . | nindent 8 }}
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: migrations
+          image: {{ .Values.images.migrations | quote }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          securityContext:
+            {{- include "sa.containerSecurity" . | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: migrations
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 256Mi}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}

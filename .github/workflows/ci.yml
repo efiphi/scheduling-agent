@@ -76,9 +76,12 @@ jobs:
       - name: Build agent image
         run: docker build -f services/agent/Dockerfile -t scheduling-agent-agent:ci .
 
+      - name: Build migrations image
+        run: docker build -f packages/db/Dockerfile -t scheduling-agent-migrations:ci .
+
       - name: Images run as a non-root user
         run: |
-          for image in scheduling-agent-api:ci scheduling-agent-gateway:ci scheduling-agent-agent:ci; do
+          for image in scheduling-agent-api:ci scheduling-agent-gateway:ci scheduling-agent-agent:ci scheduling-agent-migrations:ci; do
             test "$(docker image inspect "$image" --format '{{.Config.User}}')" = "10001:10001"
           done
 

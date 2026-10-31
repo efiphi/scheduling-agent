@@ -1,0 +1,78 @@
+# Values for the scheduling agent chart. Secrets are NOT here: each component reads a
+# Kubernetes Secret named in `secret:` below, created outside the chart (step 2.3 moves
+# them to Sealed Secrets, ADR-008). Every component gets only its own secret.
+
+images:
+  # Local development: images built by Docker Compose and loaded with `k3d image import`.
+  # Step 2.5 switches to ghcr.io with immutable tags.
+  api: scheduling-agent-api:dev
+  gateway: scheduling-agent-gateway:dev
+  agent: scheduling-agent-agent:dev
+  migrations: scheduling-agent-migrations:dev
+  # Pinned by digest (T20).
+  postgres: postgres:18-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
+  redis: redis:8-alpine@sha256:0bf6577d7774e592b29d093e3ac9390eb91e13d72c21e506afce736de5e0eeb0
+pullPolicy: IfNotPresent
+
+# One entry per process. The deployment template turns each into a Deployment (and a
+# Service when `port` is set). `secret` names the only Secret the process may read.
+workloads:
+  api:
+    image: api
+    secret: api
+    port: 8000
+    command: [uvicorn, api.main:create_app, --factory, --host, 0.0.0.0, --port, "8000", --no-server-header, --no-access-log]
+    health: /healthz
+    resources: {cpu: 100m, memory: 256Mi}
+  whatsapp-webhook:
+    image: api
+    secret: api
+    port: 8002
+    command: [uvicorn, api.main:create_webhook_app, --factory, --host, 0.0.0.0, --port, "8002", --no-server-header, --no-access-log]
+    health: /healthz
+    resources: {cpu: 50m, memory: 192Mi}
+  notifier:
+    image: api
+    secret: api
+    command: [python, -m, api.notifier]
+    resources: {cpu: 50m, memory: 192Mi}
+  google-gateway:
+    image: gateway
+    secret: gateway
+    port: 8001
+    command: [python, -m, google_gateway.serve]
+    health: /healthz
+    env: {GATEWAY_BIND_HOST: 0.0.0.0}
+    resources: {cpu: 50m, memory: 256Mi}
+  gmail-poller:
+    image: gateway
+    secret: gateway
+    command: [python, -m, google_gateway.poll, --every, "60"]
+    resources: {cpu: 50m, memory: 256Mi}
+  calendar-responder:
+    image: gateway
+    secret: gateway
+    command: [python, -m, google_gateway.free_busy_responder]
+    resources: {cpu: 50m, memory: 256Mi}
+  plan-handler:
+    image: gateway
+    secret: gateway
+    command: [python, -m, google_gateway.plan_handler]
+    resources: {cpu: 50m, memory: 256Mi}
+  action-executor:
+    image: gateway
+    secret: gateway
+    command: [python, -m, google_gateway.executor]
+    resources: {cpu: 50m, memory: 256Mi}
+  agent:
+    image: agent
+    secret: agent
+    command: [python, -m, agent.worker]
+    # The agent never talks to the database: no DB_HOST at all (ADR-011).
+    database: false
+    resources: {cpu: 100m, memory: 256Mi}
+
+postgres:
+  storage: 2Gi
+redis:
+  storage: 1Gi

@@ -1,0 +1,108 @@
+{{- /*
+PostgreSQL as a one-replica StatefulSet with its own volume. It runs as the image's
+postgres user (uid 70) from the start, so unlike Compose it needs no capabilities to
+switch users. The roles script is the same file Compose uses (tests/test_helm.py checks
+the copies match) and runs only when the volume is empty.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  labels:
+    {{- include "sa.labels" . | nindent 4 }}
+data:
+  01-roles.sh: |-
+{{ .Files.Get "files/01-roles.sh" | indent 4 }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: postgres
+  labels:
+    {{- include "sa.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels:
+    {{- include "sa.labels" . | nindent 4 }}
+    app.kubernetes.io/name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        {{- include "sa.labels" . | nindent 8 }}
+        app.kubernetes.io/name: postgres
+    spec:
+      serviceAccountName: postgres
+      automountServiceAccountToken: false
+      # No automatic SERVICE_HOST/SERVICE_PORT variables for every Service: they collide
+      # with our own (REDIS_PORT=tcp://...) and tell a pod about services it never uses.
+      enableServiceLinks: false
+      securityContext:
+        {{- include "sa.podSecurity" . | nindent 8 }}
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+      containers:
+        - name: postgres
+          image: {{ .Values.images.postgres | quote }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          securityContext:
+            {{- include "sa.containerSecurity" . | nindent 12 }}
+          env:
+            - {name: POSTGRES_USER, value: postgres}
+            - {name: POSTGRES_DB, value: scheduling_agent}
+            # Every TCP connection needs a password; only the in-pod socket is trusted.
+            - {name: POSTGRES_INITDB_ARGS, value: "--auth-host=scram-sha-256"}
+          envFrom:
+            - secretRef:
+                name: postgres
+          ports:
+            - {name: postgres, containerPort: 5432}
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, postgres, -d, scheduling_agent]
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 512Mi}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql}
+            - {name: init, mountPath: /docker-entrypoint-initdb.d, readOnly: true}
+            - {name: run, mountPath: /var/run/postgresql}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: init
+          configMap: {name: postgres-init, defaultMode: 0555}
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    {{- include "sa.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - {name: postgres, port: 5432, targetPort: postgres}

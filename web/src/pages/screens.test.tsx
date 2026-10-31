@@ -1,6 +1,6 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { notConnectedSource } from "../data/source";
 import { sourceWith } from "../test/fixtures";
@@ -32,10 +32,39 @@ describe("every screen in the map renders with no data", () => {
 });
 
 describe("security screen", () => {
-  it("test_t11_pause_button_is_on_the_security_screen", async () => {
-    renderApp("/settings/security", notConnectedSource);
+  it("test_t11_pause_button_pauses_the_agent", async () => {
     // ADR-014: pausing from any browser covers the case where no backup phone is at hand.
-    expect(await screen.findByRole("button", { name: "השהה סוכן" })).toBeDisabled();
+    const pauseAgent = vi.fn().mockResolvedValue({ ok: true });
+    renderApp("/settings/security", { ...notConnectedSource, pauseAgent });
+    await userEvent.click(await screen.findByRole("button", { name: "השהה סוכן" }));
+    expect(pauseAgent).toHaveBeenCalledOnce();
+    expect(await screen.findByRole("status")).toHaveTextContent("הסוכן הושהה");
+  });
+
+  it("asks for a fresh Google login before a sensitive change", async () => {
+    const setStopCode = vi.fn().mockResolvedValue({ ok: false, reason: "login again" });
+    renderApp("/settings/security", { ...notConnectedSource, setStopCode });
+    await userEvent.type(await screen.findByLabelText("קוד עצירה חדש"), "purple elephant 42");
+    const [saveStopCode] = screen.getAllByRole("button", { name: "שמור" });
+    if (!saveStopCode) throw new Error("no save button");
+    await userEvent.click(saveStopCode);
+    expect(setStopCode).toHaveBeenCalledWith("purple elephant 42");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("להתחבר שוב");
+    expect(alert.querySelector("a")?.getAttribute("href")).toBe("/api/auth/google/login");
+  });
+
+  it("shows the code to send for WhatsApp verification (ADR-017)", async () => {
+    const startWhatsAppVerification = vi.fn().mockResolvedValue({ code: "K7P3Q9M2", agentNumber: "+1 555 0100", expiresInSeconds: 600 });
+    renderApp("/settings/security", { ...notConnectedSource, startWhatsAppVerification });
+    await userEvent.click(await screen.findByRole("button", { name: "קבל קוד אימות" }));
+    expect(await screen.findByText("אימות K7P3Q9M2")).toBeInTheDocument();
+    expect(screen.getByText("+1 555 0100")).toBeInTheDocument();
+  });
+
+  it("the stop code field never shows what is typed", async () => {
+    renderApp("/settings/security", notConnectedSource);
+    expect(await screen.findByLabelText("קוד עצירה חדש")).toHaveAttribute("type", "password");
   });
 });
 

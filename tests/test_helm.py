@@ -295,3 +295,27 @@ def test_cronjob_pods_wait_for_the_network_before_running(objects: list[dict[str
     for name, spec in cronjobs(objects).items():
         pod = spec["jobTemplate"]["spec"]["template"]["spec"]
         assert [c["name"] for c in pod["initContainers"]] == ["wait-for-network"], name
+
+
+# --- Ingress (step 3.0) --------------------------------------------------------------------
+
+
+@needs_helm
+def test_only_the_three_http_services_are_exposed_each_on_its_own_entry_point(
+    objects: list[dict[str, Any]],
+) -> None:
+    ingresses = {o["metadata"]["name"]: o for o in objects if o["kind"] == "Ingress"}
+    exposed = {
+        name: (
+            o["metadata"]["annotations"]["traefik.ingress.kubernetes.io/router.entrypoints"],
+            [p["path"] for rule in o["spec"]["rules"] for p in rule["http"]["paths"]],
+        )
+        for name, o in ingresses.items()
+    }
+    assert exposed == {
+        "api": ("sa-api", ["/"]),
+        # T16: the gateway exposes its OAuth callback and nothing else (no /healthz, no docs).
+        "google-gateway": ("sa-gateway", ["/oauth/google/callback"]),
+        # The only part reachable from the internet, through the tunnel (ADR-017).
+        "whatsapp-webhook": ("sa-webhook", ["/whatsapp/webhook"]),
+    }

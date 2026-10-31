@@ -7,7 +7,6 @@ callback URL contains the authorization code and state. With the access log off,
 request logging is connection.py's, which records outcomes and user ids only (T16, T22).
 """
 
-import logging
 import os
 
 import uvicorn
@@ -15,6 +14,7 @@ import uvicorn
 from google_gateway.app import create_app
 from google_gateway.config import GatewayConfig
 from google_gateway.wiring import connect_flow
+from shared import log
 
 # Local only by default. The container sets 0.0.0.0 and Compose publishes the port on
 # 127.0.0.1, so the callback is still unreachable from the network.
@@ -23,9 +23,8 @@ PORT = 8001
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    # Google's HTTP client logs request URLs at INFO and below; keep it quiet (T22).
-    logging.getLogger("googleapiclient").setLevel(logging.WARNING)
+    # JSON lines with the trace id; quiet HTTP clients and redaction (shared.log, T22).
+    log.configure("google-gateway")
     app = create_app(connect_flow(GatewayConfig.from_env()))
     uvicorn.run(app, host=HOST, port=PORT, access_log=False, server_header=False)
 

@@ -34,6 +34,7 @@ from api.whatsapp import (
     parse_messages,
     valid_signature,
 )
+from shared import log
 from shared.schema import StrictModel
 from shared.streams import APPROVED_ACTIONS, STREAM_MAX_LENGTH
 
@@ -146,10 +147,9 @@ RECENT_LOGIN_SECONDS = 600
 
 
 def _configure_logging() -> None:
-    # uvicorn configures only its own loggers; ours would otherwise be silent. Our lines
-    # hold outcomes and ids only (T22).
-    if not logging.getLogger().handlers:
-        logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    # uvicorn configures only its own loggers before it imports the app. Route them and ours
+    # through one JSON handler (shared.log); our lines hold outcomes and ids only (T22).
+    log.configure("api")
 
 
 def create_app(deps: Deps | None = None) -> FastAPI:

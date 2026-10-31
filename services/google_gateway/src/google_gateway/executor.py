@@ -45,6 +45,7 @@ from google_gateway.gmail_sender import MailSender, build_message
 from google_gateway.mail_store import MailStore
 from google_gateway.pending_action import content_hash
 from google_gateway.token_crypto import EncryptedToken
+from shared import log
 from shared.messages import Interval
 from shared.streams import APPROVED_ACTIONS
 
@@ -387,10 +388,8 @@ def main() -> None:
     from google_gateway.config import GatewayConfig
     from google_gateway.wiring import executor, redis_client
 
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-    )
-    logging.getLogger("googleapiclient").setLevel(logging.WARNING)  # T22
+    # JSON lines with the trace id; quiet HTTP clients and redaction (shared.log, T22).
+    log.configure("action-executor")
     config = GatewayConfig.from_env()
     redis = redis_client(config)
     ensure_group(redis)

@@ -52,7 +52,7 @@ services/agent/
 packages/shared/        # shared schemas (Pydantic) and utilities
 web/
 deploy/compose/         # Docker Compose for local dev
-deploy/helm/            # later (Layer 2)
+deploy/helm/            # the Helm chart (Layer 2)
 infra/terraform/        # later (Layer 6)
 evals/                  # agent evals (synthetic Hebrew/English emails)
 redteam/                # attack corpus from the threat model
@@ -65,8 +65,9 @@ docs/adr/               # architecture decision records
 Work strictly in the layers defined in `docs/03-architecture.md`. Do not jump ahead.
 
 - **Layer 0 — skeleton:** repo structure, Docker Compose (Postgres, Redis), empty FastAPI service, `.gitignore`, pre-commit (ruff, gitleaks), basic GitHub Actions CI. *(done, 25.10)*
-- **Layer 1 — MVP core:** end-to-end thin path on a demo Gmail account: email → detection → slots → draft → approval → send + Meet event. *(current)* Order: 1a email → web-app approval → reply in thread; 1b WhatsApp; 1c counterpart picks a slot → event with Meet.
-- **Layers 2–6:** Kubernetes + GitOps, observability, evals + red team in CI, detection layer, temporary cloud.
+- **Layer 1 — MVP core:** end-to-end thin path on a demo Gmail account: email → detection → slots → draft → approval → send + Meet event. *(done, 31.10)* Order: 1a email → web-app approval → reply in thread; 1b WhatsApp; 1c counterpart picks a slot → event with Meet.
+- **Layer 2 — Kubernetes + GitOps:** k3d, Helm chart, Sealed Secrets, NetworkPolicies, Argo CD + GHCR, CronJobs, CI gates. *(done, 31.10)*
+- **Layers 3–6:** observability, evals + red team in CI, detection layer, temporary cloud.
 
 ## Conventions
 

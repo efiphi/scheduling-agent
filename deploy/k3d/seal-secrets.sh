@@ -29,11 +29,12 @@ value() {  # value KEY -> the value from .env, empty if missing
   grep -E "^$1=" "$ENV_FILE" | tail -n 1 | cut -d= -f2- || true
 }
 
-seal() {  # seal NAME ENV_FILE
-  kubectl create secret generic "$1" --namespace "$NAMESPACE" \
+seal() {  # seal NAME ENV_FILE [NAMESPACE OUT_DIR]
+  local ns="${3:-$NAMESPACE}" out="${4:-$OUT_DIR}"
+  kubectl create secret generic "$1" --namespace "$ns" \
     --from-env-file="$2" --dry-run=client -o yaml \
-    | kubeseal --controller-namespace kube-system --format yaml > "$OUT_DIR/$1.yaml"
-  echo "$OUT_DIR/$1.yaml: $(wc -l < "$2" | tr -d ' ') keys"
+    | kubeseal --controller-namespace kube-system --format yaml > "$out/$1.yaml"
+  echo "$out/$1.yaml: $(wc -l < "$2" | tr -d ' ') keys"
 }
 
 make_secret() {  # make_secret NAME KEY... : a SealedSecret with those keys (missing ones skipped)
@@ -66,3 +67,7 @@ print(f"MIGRATION_DATABASE_URL=postgresql+psycopg://scheduling_owner:{p}@postgre
 ' > "$workdir/migrations.env"
 printf 'OWNER_DB_PASSWORD=%s\n' "$(value OWNER_DB_PASSWORD)" >> "$workdir/migrations.env"
 seal migrations "$workdir/migrations.env"
+
+# Grafana's admin login, in the observability namespace, with the key names its chart reads.
+printf 'admin-user=admin\nadmin-password=%s\n' "$(value GRAFANA_ADMIN_PASSWORD)" > "$workdir/grafana-admin.env"
+seal grafana-admin "$workdir/grafana-admin.env" observability deploy/cluster/observability/manifests

@@ -15,7 +15,7 @@ queue instead: the task is acknowledged only after its plan is published (worker
 
 from collections.abc import Callable
 from datetime import datetime
-from typing import TypedDict
+from typing import Protocol, TypedDict
 from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
@@ -33,6 +33,7 @@ from agent.extraction import (
 )
 from agent.free_busy import FreeBusyClient
 from agent.slots import pick_slots, search_window
+from shared import tracing
 from shared.messages import (
     AgentPlan,
     AskUser,
@@ -44,6 +45,9 @@ from shared.messages import (
     PlanDecision,
     ProposeSlots,
 )
+
+_tracer = tracing.tracer(__name__)
+
 
 CALENDAR_UNAVAILABLE = "לא הצלחתי לבדוק את היומן כרגע. לנסות שוב, או שתציע מועדים בעצמך?"
 NO_FREE_SLOTS = "אין מועדים פנויים בטווח שהשולח ביקש. להציע טווח אחר?"
@@ -103,16 +107,39 @@ def build_graph(
         return {"plan": plan}
 
     graph = StateGraph(AgentState)
-    graph.add_node("extract", extract_node)
-    graph.add_node("free_busy", free_busy_node)
-    graph.add_node("choose_slots", choose_slots_node)
-    graph.add_node("plan", plan_node)
+    graph.add_node("extract", _traced("extract", extract_node))
+    graph.add_node("free_busy", _traced("free_busy", free_busy_node))
+    graph.add_node("choose_slots", _traced("choose_slots", choose_slots_node))
+    graph.add_node("plan", _traced("plan", plan_node))
     graph.add_edge(START, "extract")
     graph.add_conditional_edges("extract", after_extract, ["free_busy", "plan"])
     graph.add_conditional_edges("free_busy", after_free_busy, ["choose_slots", "plan"])
     graph.add_edge("choose_slots", "plan")
     graph.add_edge("plan", END)
     return graph.compile()
+
+
+class _NodeFn(Protocol):
+    # LangGraph matches nodes by signature, parameter name included.
+    def __call__(self, state: AgentState) -> AgentState: ...
+
+
+def _traced(name: str, node: "_NodeFn") -> "_NodeFn":
+    """A span per graph step, so a trace shows where the agent spent its time."""
+
+    def run_node(state: AgentState) -> AgentState:
+        with _tracer.start_as_current_span(f"agent.{name}") as span:
+            update = node(state)
+            if "calendar_ok" in update:
+                span.set_attribute("agent.calendar_ok", bool(update["calendar_ok"]))
+                span.set_attribute("agent.busy_count", len(update.get("busy", ())))
+            if "slots" in update:
+                span.set_attribute("agent.slot_count", len(update["slots"]))
+            if "plan" in update:
+                span.set_attribute("agent.decision", update["plan"].decision.kind)
+            return update
+
+    return run_node
 
 
 def _meeting_request(state: AgentState) -> MeetingRequest:

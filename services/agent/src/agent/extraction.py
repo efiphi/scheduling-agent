@@ -20,9 +20,14 @@ from datetime import date, timedelta
 from typing import Literal, Protocol
 from zoneinfo import ZoneInfo
 
+from opentelemetry import trace
 from pydantic import BaseModel, Field, ValidationError
 
+from shared import tracing
 from shared.messages import MAX_FREE_BUSY_WINDOW, AgentContext, UntrustedEmail
+
+_tracer = tracing.tracer(__name__)
+
 
 MODEL = "claude-haiku-5-5"
 MAX_TOKENS = 1024
@@ -148,6 +153,26 @@ class AnthropicFormFiller:
         self._model = model
 
     def fill(self, system: str, user: str) -> ModelAnswer:
+        # OpenTelemetry GenAI conventions: model, tokens, stop reason. Never the prompt or the
+        # email: only its length (a hash of a short reply could be guessed back, T22).
+        with _tracer.start_as_current_span(
+            f"chat {self._model}",
+            kind=trace.SpanKind.CLIENT,
+            attributes={
+                "gen_ai.operation.name": "chat",
+                "gen_ai.provider.name": "anthropic",
+                "gen_ai.request.model": self._model,
+                "gen_ai.request.max_tokens": MAX_TOKENS,
+                "agent.input.chars": len(user),
+            },
+        ) as span:
+            answer = self._fill(system, user)
+            span.set_attribute("gen_ai.usage.input_tokens", answer.usage.input_tokens)
+            span.set_attribute("gen_ai.usage.output_tokens", answer.usage.output_tokens)
+            span.set_attribute("gen_ai.response.finish_reasons", [answer.stop_reason or "none"])
+            return answer
+
+    def _fill(self, system: str, user: str) -> ModelAnswer:
         import anthropic
 
         try:
@@ -245,6 +270,16 @@ _FORBIDDEN_IN_OPENING = re.compile(r"@|https?://|www\.|\d{6,}", re.I)
 
 
 def interpret(answer: ModelAnswer, context: AgentContext) -> Extraction:
+    extraction = _interpret(answer, context)
+    # What the checks in code made of the answer, on the extract node's span.
+    span = trace.get_current_span()
+    span.set_attribute("agent.extraction", type(extraction).__name__)
+    if isinstance(extraction, Unclear):
+        span.set_attribute("agent.unclear_reason", extraction.reason)
+    return extraction
+
+
+def _interpret(answer: ModelAnswer, context: AgentContext) -> Extraction:
     form = answer.form
     if answer.stop_reason == "refusal":
         return _unclear("refusal")

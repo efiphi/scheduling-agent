@@ -27,13 +27,20 @@ from typing import Any
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import ValidationError
 from redis import Redis
+from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import ResponseError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from agent.extraction import MODEL, AnthropicFormFiller, Usage
 from agent.free_busy import RedisFreeBusyClient
 from agent.graph import AgentState, build_graph, run
 from shared.messages import EmailTask
-from shared.streams import AGENT_PLANS, EMAIL_TASKS, STREAM_MAX_LENGTH
+from shared.streams import (
+    AGENT_PLANS,
+    EMAIL_TASKS,
+    REDIS_SOCKET_TIMEOUT_SECONDS,
+    STREAM_MAX_LENGTH,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +182,7 @@ def main() -> None:
         host=os.environ.get("REDIS_HOST", "127.0.0.1"),
         port=int(os.environ.get("REDIS_PORT", "6379")),
         password=os.environ["REDIS_PASSWORD"],
+        socket_timeout=REDIS_SOCKET_TIMEOUT_SECONDS,
     )
     clock = lambda: datetime.now(UTC)  # noqa: E731
     graph = build_graph(AnthropicFormFiller(), RedisFreeBusyClient(redis), clock)
@@ -183,7 +191,12 @@ def main() -> None:
     worker.ensure_group()
     logger.info("agent started: model=%s daily_budget_usd=%.2f", MODEL, budget)
     while True:
-        worker.step()
+        try:
+            worker.step()
+        except (RedisTimeoutError, RedisConnectionError) as exc:
+            # A Redis hiccup is not a reason to die; the task stays pending and is retried.
+            logger.warning("redis unavailable, retrying: error=%s", type(exc).__name__)
+            time.sleep(1)
 
 
 if __name__ == "__main__":

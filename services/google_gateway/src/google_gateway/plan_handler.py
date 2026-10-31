@@ -14,6 +14,7 @@ A plan delivered twice creates nothing new (unique task id, E8). Logs: ids and o
 """
 
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -23,7 +24,9 @@ from uuid import UUID
 from google.auth.exceptions import RefreshError
 from pydantic import ValidationError
 from redis import Redis
+from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import ResponseError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from google_gateway.actions_store import ActionStore
 from google_gateway.calendar import busy_intervals
@@ -272,7 +275,12 @@ def main() -> None:
     redis, handler = redis_client(config), plan_handler(config)
     ensure_group(redis)
     while True:
-        run_once(redis, handler, socket.gethostname())
+        try:
+            run_once(redis, handler, socket.gethostname())
+        except (RedisTimeoutError, RedisConnectionError) as exc:
+            # A Redis hiccup is not a reason to die; unacknowledged work is retried.
+            logger.warning("redis unavailable, retrying: error=%s", type(exc).__name__)
+            time.sleep(1)
 
 
 if __name__ == "__main__":

@@ -22,6 +22,7 @@ never re-sent blindly: if Gmail has it, it is "executed", otherwise "failed".
 
 import json
 import logging
+import time
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager, suppress
 from dataclasses import dataclass
@@ -30,7 +31,9 @@ from uuid import UUID
 
 from google.auth.exceptions import RefreshError
 from redis import Redis
+from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import LockError, ResponseError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy import Engine, text
 
 from db.session import set_user_context
@@ -392,7 +395,12 @@ def main() -> None:
     ensure_group(redis)
     worker = executor(config)
     while True:
-        run_once(redis, worker, socket.gethostname())
+        try:
+            run_once(redis, worker, socket.gethostname())
+        except (RedisTimeoutError, RedisConnectionError) as exc:
+            # A Redis hiccup is not a reason to die; unacknowledged work is retried.
+            logger.warning("redis unavailable, retrying: error=%s", type(exc).__name__)
+            time.sleep(1)
 
 
 if __name__ == "__main__":

@@ -24,6 +24,7 @@ from google_gateway.oauth_state import RedisStateStore
 from google_gateway.plan_handler import PlanHandler, redis_notifier
 from google_gateway.poller import MailboxPoller
 from google_gateway.token_crypto import EncryptedToken, TokenCipher
+from shared.streams import REDIS_SOCKET_TIMEOUT_SECONDS
 
 
 def gateway_engine(config: GatewayConfig) -> Engine:
@@ -43,6 +44,7 @@ def redis_client(config: GatewayConfig) -> Redis:
         host=config.redis_host,
         port=config.redis_port,
         password=config.redis_password.get_secret_value(),
+        socket_timeout=REDIS_SOCKET_TIMEOUT_SECONDS,
     )
 
 

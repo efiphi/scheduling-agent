@@ -28,5 +28,11 @@ STREAM_MAX_LENGTH = 10_000
 REPLY_TTL_SECONDS = 60
 
 
+# Consumers wait up to 5 seconds for new messages (XREADGROUP BLOCK). redis-py 8 gives up
+# on any read after 5 seconds by default, the same moment, so an idle queue raced into a
+# TimeoutError and crashed its process. Every client reads with this longer timeout.
+REDIS_SOCKET_TIMEOUT_SECONDS = 30
+
+
 def free_busy_reply_key(request_id: UUID) -> str:
     return f"free-busy-reply:{request_id}"

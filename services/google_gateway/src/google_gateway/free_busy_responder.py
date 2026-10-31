@@ -12,6 +12,7 @@ The reply is pushed to a key named after the request and expires if nobody reads
 """
 
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -21,7 +22,9 @@ from uuid import UUID
 from google.auth.exceptions import RefreshError
 from pydantic import ValidationError
 from redis import Redis
+from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import ResponseError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from google_gateway.calendar import CalendarReader, busy_intervals
 from google_gateway.coordination import PollCoordination
@@ -119,7 +122,12 @@ def main() -> None:
     responder = free_busy_responder(GatewayConfig.from_env(), consumer=socket.gethostname())
     responder.ensure_group()
     while True:
-        responder.step()
+        try:
+            responder.step()
+        except (RedisTimeoutError, RedisConnectionError) as exc:
+            # A Redis hiccup is not a reason to die; unacknowledged work is retried.
+            logger.warning("redis unavailable, retrying: error=%s", type(exc).__name__)
+            time.sleep(1)
 
 
 if __name__ == "__main__":

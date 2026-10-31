@@ -3,6 +3,9 @@
 #    than from the node's disk, so Alloy runs without root or host mounts.
 #  - OTLP from the services (steps 3.3–3.5): traces to Tempo, metrics to Prometheus,
 #    logs to Loki.
+# Its optional CRDs (PodLogs, for the Prometheus operator) are not used here, and the
+# observability project does not allow CRDs: they are cluster-wide.
+crds: {create: false}
 controller:
   type: deployment
   replicas: 1

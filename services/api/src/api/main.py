@@ -8,23 +8,29 @@ Run in Docker (deploy/compose), or locally:
 --no-access-log: the login callback URL carries an authorization code (T22).
 """
 
+import json
+import logging
 import secrets
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from pydantic import BaseModel
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
+from pydantic import BaseModel, Field, SecretStr
 from redis import Redis
 
 from api.google_login import GoogleLogin, LoginError
 from api.sessions import LoginState, Session, SessionStore, new_token
 from api.store import ApiStore, ApproveResult
+from api.whatsapp import Inbox, InboxState, hash_stop_code, parse_messages, valid_signature
 from shared.schema import StrictModel
 from shared.streams import APPROVED_ACTIONS, STREAM_MAX_LENGTH
+
+logger = logging.getLogger(__name__)
 
 COOKIE = "sa_session"
 CALLBACK_PATH = "/auth/google/callback"
@@ -84,6 +90,38 @@ class Done(BaseModel):
     status: str
 
 
+class VerificationOut(BaseModel):
+    # Send this code from your phone to the agent's number (inbound verification, 1b).
+    code: str
+    agent_number: str
+    expires_in_seconds: int
+
+
+class SecurityOut(BaseModel):
+    agent_status: str
+    whatsapp_verified: bool
+    stop_code_set: bool
+    # Last four digits only: the full numbers are never sent back to the browser.
+    backup_numbers: list[str]
+
+
+class StopCodeIn(StrictModel):
+    code: str = Field(min_length=6, max_length=64)
+
+
+class BackupNumbersIn(StrictModel):
+    numbers: list[str] = Field(max_length=2)
+
+
+@dataclass(frozen=True)
+class WhatsAppDeps:
+    inbox: Inbox
+    state: InboxState
+    app_secret: SecretStr
+    verify_token: SecretStr
+    agent_number: str
+
+
 @dataclass(frozen=True)
 class Deps:
     login: GoogleLogin
@@ -92,9 +130,22 @@ class Deps:
     redis: Redis
     web_app_url: str
     cookie_secure: bool
+    whatsapp: WhatsAppDeps | None = None
+
+
+# Sensitive changes need a login within the last 10 minutes, not just a live session.
+RECENT_LOGIN_SECONDS = 600
+
+
+def _configure_logging() -> None:
+    # uvicorn configures only its own loggers; ours would otherwise be silent. Our lines
+    # hold outcomes and ids only (T22).
+    if not logging.getLogger().handlers:
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
 
 def create_app(deps: Deps | None = None) -> FastAPI:
+    _configure_logging()
     if deps is None:
         from api.wiring import deps_from_env
 
@@ -247,12 +298,139 @@ def create_app(deps: Deps | None = None) -> FastAPI:
             for q in d.store.questions(session.data.user_id)
         ]
 
+    # --- WhatsApp webhook (step 1b) -----------------------------------------------------
+
+    add_webhook_routes(app, d)
+
+    @app.post("/whatsapp/verify")
+    def start_verification(session: Change) -> VerificationOut:
+        wa = _whatsapp(d)
+        code = wa.state.start_verification(session.data.user_id)
+        return VerificationOut(code=code, agent_number=wa.agent_number, expires_in_seconds=600)
+
+    # --- Security settings (ADR-014) --------------------------------------------------
+
+    def recent_login(session: Session) -> None:
+        if time.time() - session.data.authenticated_at > RECENT_LOGIN_SECONDS:
+            # Sensitive: a live session is not enough, log in with Google again (T11, T28).
+            raise HTTPException(status_code=401, detail="login again")
+
+    @app.get("/security")
+    def security(session: Auth) -> SecurityOut:
+        user = d.store.user(session.data.user_id)
+        if user is None:
+            raise HTTPException(status_code=401, detail="login required")
+        return SecurityOut(
+            agent_status=user.status,
+            whatsapp_verified=d.store.whatsapp_verified(user.user_id),
+            stop_code_set=d.store.stop_code_hash(user.user_id) is not None,
+            backup_numbers=["…" + n[-4:] for n in d.store.backup_numbers(user.user_id)],
+        )
+
+    @app.put("/security/stop-code")
+    def set_stop_code(body: StopCodeIn, session: Change) -> Done:
+        recent_login(session)
+        d.store.set_stop_code_hash(session.data.user_id, hash_stop_code(body.code))
+        return Done(status="ok")
+
+    @app.put("/security/backup-numbers")
+    def set_backup_numbers(body: BackupNumbersIn, session: Change) -> Done:
+        recent_login(session)
+        numbers = [n.strip().lstrip("+").replace(" ", "").replace("-", "") for n in body.numbers]
+        if not all(n.isdigit() and 8 <= len(n) <= 15 for n in numbers):
+            raise HTTPException(
+                status_code=422, detail="numbers must be international, digits only"
+            )
+        d.store.set_backup_numbers(session.data.user_id, sorted(set(numbers)))
+        return Done(status="ok")
+
+    @app.post("/security/pause")
+    def pause(session: Change) -> Done:
+        """The web app's "Pause agent": the same effect as the stop code (ADR-014)."""
+        d.store.pause(session.data.user_id, "web")
+        return Done(status="paused")
+
+    @app.post("/security/resume")
+    def resume(session: Change) -> Done:
+        recent_login(session)  # resuming needs a fresh login (invariant 12)
+        d.store.resume(session.data.user_id)
+        return Done(status="active")
+
     @app.post("/questions/{question_id}/dismiss")
     def dismiss(question_id: UUID, session: Change) -> Done:
         if not d.store.dismiss_question(session.data.user_id, question_id):
             raise HTTPException(status_code=404, detail="not found")
         return Done(status="dismissed")
 
+    return app
+
+
+def _whatsapp(d: Deps) -> WhatsAppDeps:
+    if d.whatsapp is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return d.whatsapp
+
+
+def add_webhook_routes(app: FastAPI, d: Deps) -> None:
+    """The two routes Meta calls. Also served alone by create_webhook_app."""
+
+    @app.get("/whatsapp/webhook", include_in_schema=False)
+    def webhook_handshake(
+        mode: Annotated[str, Query(alias="hub.mode")] = "",
+        token: Annotated[str, Query(alias="hub.verify_token")] = "",
+        challenge: Annotated[str, Query(alias="hub.challenge")] = "",
+    ) -> Response:
+        """Meta checks the URL once, with the verify token we gave it."""
+        expected = _whatsapp(d).verify_token.get_secret_value()
+        if mode == "subscribe" and secrets.compare_digest(token, expected):
+            return PlainTextResponse(challenge)
+        raise HTTPException(status_code=403, detail="forbidden")
+
+    @app.post("/whatsapp/webhook", include_in_schema=False)
+    async def webhook(request: Request) -> Done:
+        wa = _whatsapp(d)
+        body = await request.body()
+        if not valid_signature(wa.app_secret, body, request.headers.get("x-hub-signature-256")):
+            # Not from Meta. Nothing in the body is read (T8).
+            raise HTTPException(status_code=403, detail="bad signature")
+        try:
+            payload = json.loads(body)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="bad body") from None
+        for message in parse_messages(payload):
+            outcome = wa.inbox.handle(message)
+            logger.info("whatsapp message handled: outcome=%s", outcome)
+        return Done(status="ok")
+
+
+def create_webhook_app(deps: Deps | None = None) -> FastAPI:
+    """Only the WhatsApp webhook, for the public tunnel (ADR-017).
+
+    The tunnel exposes this app, on its own port, and nothing else: login, sessions and
+    approvals stay reachable from this machine only. Everything Meta sends is checked here
+    exactly as in the full app.
+    """
+    _configure_logging()
+    if deps is None:
+        from api.wiring import deps_from_env
+
+        deps = deps_from_env()
+    app = FastAPI(
+        title="scheduling-agent whatsapp webhook", docs_url=None, redoc_url=None, openapi_url=None
+    )
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next: Callable[..., Any]) -> Response:
+        response: Response = await call_next(request)
+        for name, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
+        return response
+
+    @app.get("/healthz")
+    def healthz() -> Health:
+        return Health(status="ok")
+
+    add_webhook_routes(app, deps)
     return app
 
 

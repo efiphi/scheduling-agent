@@ -20,6 +20,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from sqlalchemy import Engine, text
+from sqlalchemy.exc import IntegrityError
 
 from db.session import set_user_context
 
@@ -76,6 +77,34 @@ class ApiStore(Protocol):
     def dismiss_question(self, user_id: UUID, question_id: UUID) -> bool: ...
 
     def audit(self, user_id: UUID, action: str, details: dict[str, Any]) -> None: ...
+
+    # --- WhatsApp (step 1b) ----------------------------------------------------------
+
+    def whatsapp_senders(self, number: str) -> list[tuple[UUID, str]]:
+        """(user_id, "owner" | "backup") for every user this number belongs to."""
+        ...
+
+    def stop_code_hash(self, user_id: UUID) -> str | None: ...
+
+    def whatsapp_verified(self, user_id: UUID) -> bool: ...
+
+    def set_stop_code_hash(self, user_id: UUID, code_hash: str) -> None: ...
+
+    def bind_whatsapp_number(self, user_id: UUID, number: str) -> bool:
+        """False if the number already belongs to another user."""
+        ...
+
+    def backup_numbers(self, user_id: UUID) -> list[str]: ...
+
+    def set_backup_numbers(self, user_id: UUID, numbers: list[str]) -> None: ...
+
+    def pause(self, user_id: UUID, channel: str) -> int:
+        """Pause the agent and cancel every pending action; returns how many (ADR-014)."""
+        ...
+
+    def resume(self, user_id: UUID) -> None: ...
+
+    def security_event(self, user_id: UUID | None, kind: str, details: dict[str, Any]) -> None: ...
 
 
 _ACTION_COLUMNS = "action_id, kind, status, payload, content_hash, expires_at, created_at"
@@ -220,3 +249,107 @@ class SqlApiStore:
         with self._engine.begin() as conn:
             set_user_context(conn, user_id)
             _audit(conn, user_id, action, details)
+
+    # --- WhatsApp ----------------------------------------------------------------------
+
+    def whatsapp_senders(self, number: str) -> list[tuple[UUID, str]]:
+        # SECURITY DEFINER (migration 0005): a webhook has a number, not yet a user.
+        with self._engine.begin() as conn:
+            rows = conn.execute(
+                text("SELECT user_id, role FROM app.whatsapp_senders(:n)"), {"n": number}
+            ).all()
+        return [(UUID(str(r[0])), str(r[1])) for r in rows]
+
+    def stop_code_hash(self, user_id: UUID) -> str | None:
+        with self._engine.begin() as conn:
+            set_user_context(conn, user_id)
+            value = conn.execute(
+                text("SELECT stop_code_hash FROM app.users WHERE user_id = :u"), {"u": user_id}
+            ).scalar_one_or_none()
+        return None if value is None else str(value)
+
+    def whatsapp_verified(self, user_id: UUID) -> bool:
+        with self._engine.begin() as conn:
+            set_user_context(conn, user_id)
+            number = conn.execute(
+                text("SELECT whatsapp_number FROM app.users WHERE user_id = :u"), {"u": user_id}
+            ).scalar_one_or_none()
+        return number is not None
+
+    def set_stop_code_hash(self, user_id: UUID, code_hash: str) -> None:
+        with self._engine.begin() as conn:
+            set_user_context(conn, user_id)
+            conn.execute(
+                text("UPDATE app.users SET stop_code_hash = :h WHERE user_id = :u"),
+                {"h": code_hash, "u": user_id},
+            )
+            _audit(conn, user_id, "stop_code_changed", {})
+
+    def bind_whatsapp_number(self, user_id: UUID, number: str) -> bool:
+        try:
+            with self._engine.begin() as conn:
+                set_user_context(conn, user_id)
+                conn.execute(
+                    text("UPDATE app.users SET whatsapp_number = :n WHERE user_id = :u"),
+                    {"n": number, "u": user_id},
+                )
+                _audit(conn, user_id, "whatsapp_number_verified", {})
+        except IntegrityError:
+            return False  # unique: the number is already another user's
+        return True
+
+    def backup_numbers(self, user_id: UUID) -> list[str]:
+        with self._engine.begin() as conn:
+            set_user_context(conn, user_id)
+            rows = conn.execute(
+                text("SELECT number FROM app.backup_numbers WHERE user_id = :u ORDER BY number"),
+                {"u": user_id},
+            ).scalars()
+            return [str(r) for r in rows]
+
+    def set_backup_numbers(self, user_id: UUID, numbers: list[str]) -> None:
+        with self._engine.begin() as conn:
+            set_user_context(conn, user_id)
+            conn.execute(text("DELETE FROM app.backup_numbers WHERE user_id = :u"), {"u": user_id})
+            for number in numbers:
+                conn.execute(
+                    text("INSERT INTO app.backup_numbers (user_id, number) VALUES (:u, :n)"),
+                    {"u": user_id, "n": number},
+                )
+            _audit(conn, user_id, "backup_numbers_changed", {"count": len(numbers)})
+
+    def pause(self, user_id: UUID, channel: str) -> int:
+        with self._engine.begin() as conn:
+            set_user_context(conn, user_id)
+            conn.execute(
+                text("UPDATE app.users SET status = 'paused' WHERE user_id = :u"), {"u": user_id}
+            )
+            cancelled = conn.execute(
+                text(
+                    "UPDATE app.pending_actions SET status = 'rejected', decided_at = now()"
+                    " WHERE user_id = :u AND status IN ('pending', 'approved')"
+                ),
+                {"u": user_id},
+            ).rowcount
+            _audit(conn, user_id, "agent_paused", {"channel": channel, "cancelled": cancelled})
+        return int(cancelled)
+
+    def resume(self, user_id: UUID) -> None:
+        with self._engine.begin() as conn:
+            set_user_context(conn, user_id)
+            conn.execute(
+                text("UPDATE app.users SET status = 'active' WHERE user_id = :u"), {"u": user_id}
+            )
+            _audit(conn, user_id, "agent_resumed", {"channel": "web"})
+
+    def security_event(self, user_id: UUID | None, kind: str, details: dict[str, Any]) -> None:
+        with self._engine.begin() as conn:
+            if user_id is not None:
+                set_user_context(conn, user_id)
+            conn.execute(
+                text(
+                    "INSERT INTO app.security_events (user_id, kind, details)"
+                    " VALUES (:u, :k, CAST(:d AS jsonb))"
+                ),
+                {"u": user_id, "k": kind, "d": json.dumps(details)},
+            )

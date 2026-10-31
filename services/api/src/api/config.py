@@ -31,6 +31,11 @@ class ApiConfig(StrictModel):
     redis_port: int
     # Browsers treat http://localhost as a secure origin, so Secure cookies work locally too.
     cookie_secure: bool
+    # WhatsApp (step 1b). Optional: without them the api runs without the webhook.
+    whatsapp_token: SecretStr | None = None
+    whatsapp_phone_number_id: str | None = None
+    whatsapp_app_secret: SecretStr | None = None
+    whatsapp_verify_token: SecretStr | None = None
 
     @classmethod
     def from_env(cls) -> "ApiConfig":
@@ -46,6 +51,19 @@ class ApiConfig(StrictModel):
             redis_host=os.environ.get("REDIS_HOST", "127.0.0.1"),
             redis_port=int(os.environ.get("REDIS_PORT", "6379")),
             cookie_secure=os.environ.get("SESSION_COOKIE_SECURE", "1") != "0",
+            whatsapp_token=_optional_secret("WHATSAPP_ACCESS_TOKEN"),
+            whatsapp_phone_number_id=os.environ.get("WHATSAPP_PHONE_NUMBER_ID") or None,
+            whatsapp_app_secret=_optional_secret("WHATSAPP_APP_SECRET"),
+            whatsapp_verify_token=_optional_secret("WHATSAPP_VERIFY_TOKEN"),
+        )
+
+    @property
+    def whatsapp_configured(self) -> bool:
+        return None not in (
+            self.whatsapp_token,
+            self.whatsapp_phone_number_id,
+            self.whatsapp_app_secret,
+            self.whatsapp_verify_token,
         )
 
 
@@ -54,3 +72,8 @@ def _required(name: str) -> str:
     if not value or value == "change-me":
         raise ConfigError(f"{name} is not set (see deploy/compose/.env.example)")
     return value
+
+
+def _optional_secret(name: str) -> SecretStr | None:
+    value = os.environ.get(name, "")
+    return SecretStr(value) if value and value != "change-me" else None

@@ -20,3 +20,4 @@ Each significant decision is recorded as a short ADR: what was decided, why, wha
 | [014](014-stop-code-from-backup-numbers.md) | Emergency stop only from registered backup numbers, plus a web pause | Accepted |
 | [015](015-llm-provider-and-model.md) | Claude Haiku 5.5 for the agent, verified on synthetic emails first | Accepted |
 | [016](016-token-encryption.md) | Google refresh tokens encrypted with AES-256-GCM, bound to their user | Accepted |
+| [017](017-whatsapp-channel.md) | The WhatsApp channel: signed webhook, inbound verification, one template | Accepted |

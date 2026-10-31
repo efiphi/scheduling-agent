@@ -1,20 +1,11 @@
 {{- /*
 One Deployment per entry in .Values.workloads, plus a Service for those with a port.
-Every pod gets: its own ServiceAccount with no Kubernetes token mounted (nothing here
-talks to the Kubernetes API), the hardened security context (T21), only its own Secret
-(invariants 1 and 7), and a writable /tmp on an emptyDir, since the root filesystem is
-read-only.
+The pod spec, with its hardening, is shared with the CronJobs (_helpers.tpl).
 */ -}}
 {{- range $name, $w := .Values.workloads }}
+{{- $args := dict "root" $ "name" $name "w" $w "restartPolicy" "Always" "waitForNetwork" false }}
 ---
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: {{ $name }}
-  labels:
-    {{- include "sa.labels" $ | nindent 4 }}
-    app.kubernetes.io/name: {{ $name }}
-automountServiceAccountToken: false
+{{ include "sa.serviceAccount" $args }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -31,70 +22,9 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "sa.labels" $ | nindent 8 }}
-        app.kubernetes.io/name: {{ $name }}
-        app.kubernetes.io/component: {{ $w.image }}
-        # What this pod may reach (networkpolicies.yaml). Every worker uses Redis.
-        scheduling-agent/redis: "true"
-        {{- if ne $w.database false }}
-        scheduling-agent/database: "true"
-        {{- end }}
-        {{- if $w.internet }}
-        scheduling-agent/internet: "true"
-        {{- end }}
+        {{- include "sa.workerLabels" $args | nindent 8 }}
     spec:
-      serviceAccountName: {{ $name }}
-      automountServiceAccountToken: false
-      # No automatic SERVICE_HOST/SERVICE_PORT variables for every Service: they collide
-      # with our own (REDIS_PORT=tcp://...) and tell a pod about services it never uses.
-      enableServiceLinks: false
-      securityContext:
-        {{- include "sa.podSecurity" $ | nindent 8 }}
-        runAsUser: 10001
-        runAsGroup: 10001
-      containers:
-        - name: {{ $name }}
-          image: {{ index $.Values.images $w.image | quote }}
-          imagePullPolicy: {{ $.Values.pullPolicy }}
-          command: {{ toJson $w.command }}
-          securityContext:
-            {{- include "sa.containerSecurity" $ | nindent 12 }}
-          env:
-            - name: REDIS_HOST
-              value: redis
-            {{- if ne $w.database false }}
-            - name: DB_HOST
-              value: postgres
-            {{- end }}
-            {{- range $key, $value := $w.env }}
-            - name: {{ $key }}
-              value: {{ $value | quote }}
-            {{- end }}
-          envFrom:
-            - secretRef:
-                name: {{ $w.secret }}
-          {{- if $w.port }}
-          ports:
-            - name: http
-              containerPort: {{ $w.port }}
-          {{- end }}
-          {{- if $w.health }}
-          readinessProbe:
-            httpGet: {path: {{ $w.health }}, port: http}
-            periodSeconds: 10
-          livenessProbe:
-            httpGet: {path: {{ $w.health }}, port: http}
-            initialDelaySeconds: 10
-            periodSeconds: 30
-          {{- end }}
-          resources:
-            requests: {cpu: {{ $w.resources.cpu }}, memory: {{ $w.resources.memory }}}
-            limits: {memory: {{ $w.resources.memory }}}
-          volumeMounts:
-            - {name: tmp, mountPath: /tmp}
-      volumes:
-        - name: tmp
-          emptyDir: {sizeLimit: 64Mi}
+      {{- include "sa.workerPodSpec" $args | nindent 6 }}
 {{- if $w.port }}
 ---
 apiVersion: v1

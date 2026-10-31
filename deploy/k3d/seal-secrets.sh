@@ -56,11 +56,13 @@ make_secret gateway GATEWAY_DB_PASSWORD REDIS_PASSWORD GOOGLE_CONNECT_CLIENT_ID 
   GOOGLE_CONNECT_CLIENT_SECRET TOKEN_ENCRYPTION_KEYS
 make_secret agent REDIS_PASSWORD ANTHROPIC_API_KEY AGENT_DAILY_BUDGET_USD
 
-# Migrations connect as scheduling_owner with a URL; the password is URL-encoded, read
-# from the environment rather than the command line.
+# The owner credential, for the two owner-run jobs only: migrations connect with a URL (the
+# password URL-encoded, read from the environment rather than the command line), and the
+# daily purge (db.maintenance) with the plain password.
 OWNER_DB_PASSWORD="$(value OWNER_DB_PASSWORD)" python3 -c '
 import os, urllib.parse
 p = urllib.parse.quote(os.environ["OWNER_DB_PASSWORD"], safe="")
 print(f"MIGRATION_DATABASE_URL=postgresql+psycopg://scheduling_owner:{p}@postgres:5432/scheduling_agent")
 ' > "$workdir/migrations.env"
+printf 'OWNER_DB_PASSWORD=%s\n' "$(value OWNER_DB_PASSWORD)" >> "$workdir/migrations.env"
 seal migrations "$workdir/migrations.env"

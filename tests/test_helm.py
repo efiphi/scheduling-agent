@@ -38,24 +38,32 @@ def objects() -> list[dict[str, Any]]:
     return [doc for doc in yaml.safe_load_all(out) if doc]
 
 
+def pod_templates(objects: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Every pod the chart can start, by owner name: Deployments, StatefulSets, Jobs, CronJobs."""
+    templates = {}
+    for o in objects:
+        if o["kind"] in {"Deployment", "StatefulSet", "Job"}:
+            templates[o["metadata"]["name"]] = o["spec"]["template"]
+        elif o["kind"] == "CronJob":
+            templates[o["metadata"]["name"]] = o["spec"]["jobTemplate"]["spec"]["template"]
+    return templates
+
+
 def pod_specs(objects: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    kinds = {"Deployment", "StatefulSet", "Job"}
-    return {
-        o["metadata"]["name"]: o["spec"]["template"]["spec"] for o in objects if o["kind"] in kinds
-    }
+    return {name: t["spec"] for name, t in pod_templates(objects).items()}
 
 
 @needs_helm
 def test_t21_every_pod_is_hardened(objects: list[dict[str, Any]]) -> None:
     specs = pod_specs(objects)
-    assert len(specs) >= 12  # nine workers, Postgres, Redis, migrations
+    assert len(specs) >= 13  # eight workers, two CronJobs, Postgres, Redis, migrations
     for name, spec in specs.items():
         assert spec["automountServiceAccountToken"] is False, name
         assert spec["enableServiceLinks"] is False, name
         assert spec["securityContext"]["runAsNonRoot"] is True, name
         assert spec["securityContext"]["runAsUser"] != 0, name
         assert spec["securityContext"]["seccompProfile"] == {"type": "RuntimeDefault"}, name
-        for container in spec["containers"]:
+        for container in spec["containers"] + spec.get("initContainers", []):
             sc = container["securityContext"]
             assert sc["allowPrivilegeEscalation"] is False, name
             assert sc["readOnlyRootFilesystem"] is True, name
@@ -87,7 +95,7 @@ def test_t13_t17_each_component_reads_only_its_own_secret(objects: list[dict[str
         "whatsapp-webhook": {"api"},
         "notifier": {"api"},
         "google-gateway": {"gateway"},
-        "gmail-poller": {"gateway"},
+        "gmail-poll": {"gateway"},
         "calendar-responder": {"gateway"},
         "plan-handler": {"gateway"},
         "action-executor": {"gateway"},
@@ -95,6 +103,7 @@ def test_t13_t17_each_component_reads_only_its_own_secret(objects: list[dict[str
         "postgres": {"postgres"},
         "redis": {"redis"},
         MIGRATIONS: {"migrations"},
+        "purge-skipped": {"migrations"},
     }
     assert {name: secrets_of(spec) for name, spec in pod_specs(objects).items()} == expected
 
@@ -145,7 +154,7 @@ ALLOWED_KEYS = {
         "TOKEN_ENCRYPTION_KEYS",
     },
     "agent": {"REDIS_PASSWORD", "ANTHROPIC_API_KEY", "AGENT_DAILY_BUDGET_USD"},
-    "migrations": {"MIGRATION_DATABASE_URL"},
+    "migrations": {"MIGRATION_DATABASE_URL", "OWNER_DB_PASSWORD"},
 }
 
 
@@ -187,12 +196,7 @@ def test_every_secret_the_chart_reads_is_sealed(objects: list[dict[str, Any]]) -
 
 
 def pod_labels(objects: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
-    kinds = {"Deployment", "StatefulSet", "Job"}
-    return {
-        o["metadata"]["name"]: o["spec"]["template"]["metadata"]["labels"]
-        for o in objects
-        if o["kind"] in kinds
-    }
+    return {name: t["metadata"]["labels"] for name, t in pod_templates(objects).items()}
 
 
 @needs_helm
@@ -211,11 +215,12 @@ def test_adr_011_the_agent_is_not_labeled_for_the_database(objects: list[dict[st
         "whatsapp-webhook",
         "notifier",
         "google-gateway",
-        "gmail-poller",
+        "gmail-poll",
         "calendar-responder",
         "plan-handler",
         "action-executor",
         MIGRATIONS,
+        "purge-skipped",
     }
 
 
@@ -224,7 +229,7 @@ def test_t21_data_stores_and_migrations_cannot_reach_the_internet(
     objects: list[dict[str, Any]],
 ) -> None:
     labels = pod_labels(objects)
-    for name in ("postgres", "redis", MIGRATIONS):
+    for name in ("postgres", "redis", MIGRATIONS, "purge-skipped"):
         assert "scheduling-agent/internet" not in labels[name], name
 
 
@@ -254,3 +259,39 @@ def test_http_services_accept_only_the_ingress_controller(objects: list[dict[str
         [rule] = o["spec"]["ingress"]
         [source] = rule["from"]
         assert source["podSelector"] == {"matchLabels": {"app.kubernetes.io/name": "traefik"}}
+
+
+# --- CronJobs (E7, UC-M8) ------------------------------------------------------------------
+
+
+def cronjobs(objects: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {o["metadata"]["name"]: o["spec"] for o in objects if o["kind"] == "CronJob"}
+
+
+@needs_helm
+def test_mail_is_polled_every_minute_and_runs_never_overlap(objects: list[dict[str, Any]]) -> None:
+    poll = cronjobs(objects)["gmail-poll"]
+    assert poll["schedule"] == "* * * * *"
+    assert poll["concurrencyPolicy"] == "Forbid"
+    # A run still going when the next one is due is stopped, not stacked.
+    assert poll["jobTemplate"]["spec"]["activeDeadlineSeconds"] < 60
+    assert "gmail-poller" not in {o["metadata"]["name"] for o in objects}
+
+
+@needs_helm
+def test_uc_m8_skipped_emails_are_purged_daily_by_the_owner_only(
+    objects: list[dict[str, Any]],
+) -> None:
+    purge = cronjobs(objects)["purge-skipped"]
+    assert purge["schedule"].split()[2:] == ["*", "*", "*"]  # every day
+    [container] = purge["jobTemplate"]["spec"]["template"]["spec"]["containers"]
+    assert container["command"][-2:] == ["db.maintenance", "purge-skipped"]
+    labels = pod_labels(objects)["purge-skipped"]
+    assert "scheduling-agent/redis" not in labels and "scheduling-agent/internet" not in labels
+
+
+@needs_helm
+def test_cronjob_pods_wait_for_the_network_before_running(objects: list[dict[str, Any]]) -> None:
+    for name, spec in cronjobs(objects).items():
+        pod = spec["jobTemplate"]["spec"]["template"]["spec"]
+        assert [c["name"] for c in pod["initContainers"]] == ["wait-for-network"], name

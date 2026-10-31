@@ -106,7 +106,44 @@ services:
       GOOGLE_LOGIN_CLIENT_ID: ${GOOGLE_LOGIN_CLIENT_ID:-}
       GOOGLE_LOGIN_CLIENT_SECRET: ${GOOGLE_LOGIN_CLIENT_SECRET:-}
       WEB_APP_URL: ${WEB_APP_URL:-http://localhost:5173/}
+      # WhatsApp (ADR-017): the api is the only holder of the Meta token. Optional here.
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
     ports: ["127.0.0.1:8000:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  # The only part of the system reachable from the internet in development: Meta's
+  # webhook, through a Cloudflare quick tunnel to 127.0.0.1:8002 (ADR-017). The same api
+  # image and code, but an app with nothing else in it.
+  whatsapp-webhook:
+    image: scheduling-agent-api:dev
+    <<: *hardening
+    read_only: true
+    tmpfs: [/tmp]
+    restart: unless-stopped
+    networks: [data, queue]
+    command: ["uvicorn", "api.main:create_webhook_app", "--factory", "--host", "0.0.0.0", "--port", "8002", "--no-server-header", "--no-access-log"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8002/healthz', timeout=2).status == 200 else 1)"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    environment:
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?set API_DB_PASSWORD in deploy/compose/.env}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in deploy/compose/.env}
+      GOOGLE_LOGIN_CLIENT_ID: ${GOOGLE_LOGIN_CLIENT_ID:-}
+      GOOGLE_LOGIN_CLIENT_SECRET: ${GOOGLE_LOGIN_CLIENT_SECRET:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
+    ports: ["127.0.0.1:8002:8002"]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

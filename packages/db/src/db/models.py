@@ -68,7 +68,8 @@ class User(Base):
     email: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="active")
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
-    whatsapp_number: Mapped[str | None] = mapped_column(Text)
+    # The verified WhatsApp number: digits only, international, no "+" (as Meta sends it).
+    whatsapp_number: Mapped[str | None] = mapped_column(Text, unique=True)
     # argon2id hash of the emergency stop code (ADR-014); never the code itself.
     stop_code_hash: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _created_at()
@@ -227,6 +228,27 @@ class Approval(Base):
     channel: Mapped[str] = mapped_column(Text, nullable=False)
     approved_at: Mapped[datetime] = _created_at()
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class BackupNumber(Base):
+    """Up to two numbers that may send the stop code for this user (ADR-014, UC-W8).
+
+    A backup number can only stop the agent; nothing else it sends is processed.
+    Numbers are digits only, in international form without "+" (as Meta sends them).
+    """
+
+    __tablename__ = "backup_numbers"
+    __table_args__ = (
+        UniqueConstraint("user_id", "number", name="backup_numbers_user_number"),
+        CheckConstraint("number ~ '^[0-9]{8,15}$'", name="backup_numbers_digits"),
+    )
+
+    backup_id: Mapped[UUID] = _uuid_pk()
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
+    )
+    number: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = _created_at()
 
 
 class UserQuestion(Base):

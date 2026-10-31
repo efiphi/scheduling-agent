@@ -69,6 +69,11 @@ class FakeStore:
     actions_by_id: dict[UUID, tuple[UUID, Action]] = field(default_factory=dict)
     approvals: set[UUID] = field(default_factory=set)
     audits: list[tuple[UUID, str]] = field(default_factory=list)
+    numbers: dict[UUID, str] = field(default_factory=dict)
+    backups: dict[UUID, list[str]] = field(default_factory=dict)
+    stop_hashes: dict[UUID, str] = field(default_factory=dict)
+    paused: list[tuple[UUID, str]] = field(default_factory=list)
+    events: list[tuple[UUID | None, str]] = field(default_factory=list)
 
     def add_user(self, email: str = USER_EMAIL, status: str = "active") -> UUID:
         user_id = uuid4()
@@ -140,6 +145,57 @@ class FakeStore:
 
     def audit(self, user_id: UUID, action: str, details: dict[str, Any]) -> None:
         self.audits.append((user_id, action))
+
+    # --- WhatsApp ---------------------------------------------------------------------
+
+    def whatsapp_senders(self, number: str) -> list[tuple[UUID, str]]:
+        found = [(u, "owner") for u, n in self.numbers.items() if n == number]
+        found += [(u, "backup") for u, ns in self.backups.items() if number in ns]
+        return found
+
+    def stop_code_hash(self, user_id: UUID) -> str | None:
+        return self.stop_hashes.get(user_id)
+
+    def whatsapp_verified(self, user_id: UUID) -> bool:
+        return user_id in self.numbers
+
+    def set_stop_code_hash(self, user_id: UUID, code_hash: str) -> None:
+        self.stop_hashes[user_id] = code_hash
+
+    def bind_whatsapp_number(self, user_id: UUID, number: str) -> bool:
+        if number in self.numbers.values():
+            return False
+        self.numbers[user_id] = number
+        return True
+
+    def backup_numbers(self, user_id: UUID) -> list[str]:
+        return sorted(self.backups.get(user_id, []))
+
+    def set_backup_numbers(self, user_id: UUID, numbers: list[str]) -> None:
+        self.backups[user_id] = list(numbers)
+
+    def pause(self, user_id: UUID, channel: str) -> int:
+        user = self.users[user_id]
+        self.users[user_id] = User(user.user_id, user.email, "paused", user.is_admin)
+        pending = [
+            a
+            for owner, a in self.actions_by_id.values()
+            if owner == user_id and a.status == "pending"
+        ]
+        for a in pending:
+            self.actions_by_id[a.action_id] = (
+                user_id,
+                Action(**{**a.__dict__, "status": "rejected"}),
+            )
+        self.paused.append((user_id, channel))
+        return len(pending)
+
+    def resume(self, user_id: UUID) -> None:
+        user = self.users[user_id]
+        self.users[user_id] = User(user.user_id, user.email, "active", user.is_admin)
+
+    def security_event(self, user_id: UUID | None, kind: str, details: dict[str, Any]) -> None:
+        self.events.append((user_id, kind))
 
 
 @dataclass

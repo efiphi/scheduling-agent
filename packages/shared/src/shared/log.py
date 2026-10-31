@@ -34,7 +34,9 @@ _REDACTIONS = [
     re.compile(r"\b1//[A-Za-z0-9._-]{20,}"),  # Google refresh token
     re.compile(r"\bEAA[A-Za-z0-9]{20,}"),  # Meta access token
     re.compile(r"\bsk-ant-[A-Za-z0-9_-]{10,}"),  # Anthropic API key
-    re.compile(r"(?i)\b(password|passwd|secret|api[_-]?key|access[_-]?token)=[^\s&]+"),
+    re.compile(
+        r"(?i)\b(password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|code|state)=[^\s&]+"
+    ),
 ]
 
 # Attributes every LogRecord has; anything else came from `extra=` and is logged as a field.
@@ -99,9 +101,16 @@ def configure(service: str, level: int = logging.INFO) -> None:
     root.handlers = [handler]
     root.setLevel(level)
     # uvicorn installs its own text handlers before it imports the app; route them here too.
-    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    for name in ("uvicorn", "uvicorn.error"):
         uvicorn_logger = logging.getLogger(name)
         uvicorn_logger.handlers = []
         uvicorn_logger.propagate = True
+    # Never the access log: it prints every request URL, and the OAuth callback URLs carry
+    # the authorization code and state (T16, T22). The services also start uvicorn with
+    # --no-access-log; this keeps it off even if a process is started without that flag.
+    access = logging.getLogger("uvicorn.access")
+    access.handlers = []
+    access.propagate = False
+    access.disabled = True
     for name in QUIET_LOGGERS:
         logging.getLogger(name).setLevel(logging.WARNING)

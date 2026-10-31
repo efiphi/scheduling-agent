@@ -19,6 +19,7 @@ from redis.exceptions import ResponseError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from api.whatsapp import Notifier
+from shared import log
 from shared.streams import NOTIFICATIONS
 
 logger = logging.getLogger(__name__)
@@ -57,11 +58,8 @@ def run_once(redis: Redis, notifier: Notifier, consumer: str) -> int:
 def main() -> None:
     from api.wiring import deps_from_env
 
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-    )
-    for noisy in ("httpx", "httpx2"):
-        logging.getLogger(noisy).setLevel(logging.WARNING)  # request URLs stay out (T22)
+    # JSON lines with the trace id; quiet HTTP clients and redaction (shared.log, T22).
+    log.configure("notifier")
     deps = deps_from_env()
     if deps.whatsapp is None or deps.notifier is None:
         raise SystemExit("WhatsApp is not configured (see deploy/compose/.env.example)")

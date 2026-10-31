@@ -8,12 +8,12 @@ Compose stand-in. A per-user lock in Redis keeps overlapping runs from colliding
 """
 
 import argparse
-import logging
 import sys
 import time
 
 from google_gateway.config import GatewayConfig
 from google_gateway.wiring import mailbox_poller
+from shared import log
 
 MIN_INTERVAL_SECONDS = 30
 
@@ -27,11 +27,8 @@ def main(argv: list[str]) -> None:
     if args.every is not None and args.every < MIN_INTERVAL_SECONDS:
         parser.error(f"--every must be at least {MIN_INTERVAL_SECONDS} seconds")
 
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-    )
-    # Google's HTTP client logs request URLs at INFO and below; keep it quiet (T22).
-    logging.getLogger("googleapiclient").setLevel(logging.WARNING)
+    # JSON lines with the trace id; quiet HTTP clients and redaction (shared.log, T22).
+    log.configure("gmail-poll")
     poller = mailbox_poller(GatewayConfig.from_env())
     while True:
         started = time.monotonic()

@@ -34,6 +34,7 @@ from redis.exceptions import TimeoutError as RedisTimeoutError
 from agent.extraction import MODEL, AnthropicFormFiller, Usage
 from agent.free_busy import RedisFreeBusyClient
 from agent.graph import AgentState, build_graph, run
+from shared import log
 from shared.messages import EmailTask
 from shared.streams import (
     AGENT_PLANS,
@@ -169,12 +170,8 @@ def _first(entries: Any) -> tuple[str, dict[bytes, bytes]] | None:
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-    )
-    # The HTTP clients log request details at INFO; keep them quiet (T22).
-    for noisy in ("httpx", "httpx2", "anthropic"):
-        logging.getLogger(noisy).setLevel(logging.WARNING)
+    # JSON lines with the trace id; quiet HTTP clients and redaction (shared.log, T22).
+    log.configure("agent")
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise SystemExit("ANTHROPIC_API_KEY is not set (see deploy/compose/.env.example)")
 

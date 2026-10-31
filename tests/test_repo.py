@@ -33,3 +33,15 @@ def test_redis_reads_outlast_every_queue_wait() -> None:
 
     waits = [m.BLOCK_MS for m in (worker, notifier, executor, free_busy_responder, plan_handler)]
     assert 2 * max(waits) < REDIS_SOCKET_TIMEOUT_SECONDS * 1000
+
+
+def test_every_process_logs_through_shared_log() -> None:
+    # One JSON format with redaction everywhere (T22). A new entry point that calls
+    # basicConfig would log in plain text, without redaction, and break the dashboards.
+    sources = sorted(ROOT.glob("services/*/src/**/*.py")) + sorted(
+        ROOT.glob("packages/*/src/**/*.py")
+    )
+    offenders = [
+        str(p.relative_to(ROOT)) for p in sources if "logging.basicConfig" in p.read_text()
+    ]
+    assert offenders == []

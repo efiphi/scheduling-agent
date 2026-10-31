@@ -59,6 +59,19 @@ alloy:
 
       loki.source.kubernetes "pods" {
         targets    = discovery.relabel.pods.output
+        forward_to = [loki.process.json.receiver]
+      }
+
+      // Our services log one JSON object per line (shared.log). The level becomes a label,
+      // so errors can be selected without parsing; everything else stays a field, read
+      // with `| json` in a query (labels must stay few, or Loki slows down).
+      loki.process "json" {
+        stage.json {
+          expressions = { level = "level" }
+        }
+        stage.labels {
+          values = { level = "" }
+        }
         forward_to = [loki.write.default.receiver]
       }
 

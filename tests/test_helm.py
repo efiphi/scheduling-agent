@@ -5,6 +5,7 @@ render the chart and check every pod. Needs the helm binary; skipped without it
 (CI installs it in step 2.7).
 """
 
+import hashlib
 import shutil
 import subprocess
 from pathlib import Path
@@ -17,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CHART = ROOT / "deploy/helm/scheduling-agent"
 HELM = shutil.which("helm")
 needs_helm = pytest.mark.skipif(HELM is None, reason="helm is not installed")
+# The Job is named after its image (templates/migrations.yaml); the default values use :dev.
+MIGRATIONS = "migrations-" + hashlib.sha256(b"scheduling-agent-migrations:dev").hexdigest()[:8]
 
 
 def test_postgres_roles_script_is_the_same_file_compose_uses() -> None:
@@ -91,7 +94,7 @@ def test_t13_t17_each_component_reads_only_its_own_secret(objects: list[dict[str
         "agent": {"agent"},
         "postgres": {"postgres"},
         "redis": {"redis"},
-        "migrations-1": {"migrations"},
+        MIGRATIONS: {"migrations"},
     }
     assert {name: secrets_of(spec) for name, spec in pod_specs(objects).items()} == expected
 
@@ -212,7 +215,7 @@ def test_adr_011_the_agent_is_not_labeled_for_the_database(objects: list[dict[st
         "calendar-responder",
         "plan-handler",
         "action-executor",
-        "migrations-1",
+        MIGRATIONS,
     }
 
 
@@ -221,7 +224,7 @@ def test_t21_data_stores_and_migrations_cannot_reach_the_internet(
     objects: list[dict[str, Any]],
 ) -> None:
     labels = pod_labels(objects)
-    for name in ("postgres", "redis", "migrations-1"):
+    for name in ("postgres", "redis", MIGRATIONS):
         assert "scheduling-agent/internet" not in labels[name], name
 
 

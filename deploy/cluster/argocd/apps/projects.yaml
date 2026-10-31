@@ -1,0 +1,35 @@
+# Two AppProjects, so a mistake or a malicious change in one place cannot reach further:
+#
+#   platform          cluster-wide pieces (the Sealed Secrets controller): may create
+#                     cluster-scoped objects such as CRDs and ClusterRoles, only in kube-system.
+#   scheduling-agent  the application and its sealed Secrets: namespaced objects in the
+#                     scheduling-agent namespace only. A chart change that tried to add a
+#                     ClusterRole, or to deploy into kube-system, is refused by Argo CD.
+#
+# Both accept manifests from this repository only.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  description: Cluster-wide components
+  sourceRepos: [https://github.com/efiphi/scheduling-agent.git]
+  destinations:
+    - {server: https://kubernetes.default.svc, namespace: kube-system}
+  clusterResourceWhitelist:
+    - {group: "*", kind: "*"}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: scheduling-agent
+  namespace: argocd
+spec:
+  description: The scheduling agent
+  sourceRepos: [https://github.com/efiphi/scheduling-agent.git]
+  destinations:
+    - {server: https://kubernetes.default.svc, namespace: scheduling-agent}
+  # Only the namespace itself is cluster-scoped; nothing else outside the namespace.
+  clusterResourceWhitelist:
+    - {group: "", kind: Namespace}

@@ -1,0 +1,11 @@
+# The k3d environment: which image each component runs. Argo CD deploys the chart with
+# these values (deploy/cluster/argocd/apps/scheduling-agent.yaml).
+#
+# CI rewrites the four lines below after every green build of main (images.yml): each
+# image by digest, so what runs is exactly what CI built and tested (T20). Do not edit
+# them by hand; to roll back, revert the commit that changed them.
+images:
+  api: scheduling-agent-api:dev
+  gateway: scheduling-agent-gateway:dev
+  agent: scheduling-agent-agent:dev
+  migrations: scheduling-agent-migrations:dev

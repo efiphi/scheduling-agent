@@ -95,6 +95,6 @@ Also decided (23.10, round two): two OAuth flows with the Gmail/Calendar callbac
 
 Also decided (26.10, start of Layer 1): LLM = Claude Haiku 5.5 with structured outputs, verified on 10–15 synthetic Hebrew/English emails first, Sonnet 5.5 as the fallback (ADR-015); database access with SQLAlchemy + Alembic, RLS policies and GRANTs as explicit SQL in migrations; WhatsApp after the email → web-approval path.
 
-Also decided (2.11): the approval card shows the incoming email's sender, subject, a model summary that is never cut, and a Gmail link; the summary is display only (ADR-019, T31).
+Also decided (2.11): the approval card shows the incoming email's sender, subject, and a model summary that is never cut; the summary is display only (ADR-019, T31).
 
 Still open: whether to add a separate "reader" LLM in addition to key separation (to discuss with the security mentor).

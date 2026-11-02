@@ -17,7 +17,6 @@ Every pending action created from an email carries, in its payload, an `incoming
 - **Sender:** the parsed address, not the display name, which anyone can set freely.
 - **Subject:** with line breaks and invisible or direction-changing characters removed.
 - **Summary:** in Hebrew, written by the model in the existing extraction call, so there is no second call. It covers what the sender wants and every other topic in the email.
-- **Link to Gmail:** built by the gateway from Google's thread id.
 
 Rules that keep the summary harmless:
 
@@ -33,6 +32,7 @@ On WhatsApp, a message with buttons holds at most 1,024 characters, and the old 
 ## Alternatives
 
 - **A verbatim excerpt from the start of the email.** The model cannot distort it, but in a long email it can miss the point, which is the case this is for.
+- **A link to the email in Gmail.** Built and tried, then removed at the owner's request: it added little on a phone, and the card already says what the email is about.
 - **Sender and subject only.** No new risk, but the subject says little when the request is part of a longer email.
 - **A separate model call for the summary.** Costs more, and the same content reaches a model either way.
 - **A hard limit of two sentences.** Rejected by the owner: it can cut the content short, and the point is to know what the email says.
@@ -40,7 +40,7 @@ On WhatsApp, a message with buttons holds at most 1,024 characters, and the old 
 ## Consequences
 
 - **Positive:** the user can decide from the card, and sees when an email asks for more than a meeting.
-- **Negative:** a manipulated summary can still mislead. The damage is limited to the user approving a reply with slots, which passes the policy guard as usual, and the original is one tap away.
+- **Negative:** a manipulated summary can still mislead. The damage is limited to the user approving a reply with slots, which passes the policy guard as usual, and the original stays in the user's mailbox.
 - **Negative:** text derived from third-party email is now stored in `pending_actions` and passes through Meta, as the outgoing reply already does. Logs and traces stay free of it (T22).
 - **Negative:** about 350-450 more output tokens per email, measured on two test emails (272 before, 613 and 721 after), which at Haiku prices is about $0.0002 per email. `MAX_TOKENS` goes from 1024 to 2048 so that a long summary does not truncate the form.
 - **Not covered yet:** questions to the user (UC-M7) still show no email context.

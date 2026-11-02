@@ -392,7 +392,7 @@ def _incoming_lines(incoming: Any) -> list[str]:
     ]
     summary = incoming.get("summary")
     lines += ["", SUMMARY_LABEL, str(summary)] if summary else ["", NO_SUMMARY]
-    lines += ["", "המייל המקורי:", str(incoming.get("gmail_url", "")), "", "---", ""]
+    lines += ["", "---", ""]
     return lines
 
 

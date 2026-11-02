@@ -76,7 +76,6 @@ class IncomingOut(BaseModel):
     sender: str
     subject: str
     summary: str | None
-    gmail_url: str
 
 
 class ActionOut(BaseModel):

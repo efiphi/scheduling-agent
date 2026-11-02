@@ -383,8 +383,6 @@ export interface components {
          * @description The email an action answers. Untrusted text, to show and never to act on (T19, T31).
          */
         IncomingOut: {
-            /** Gmail Url */
-            gmail_url: string;
             /** Sender */
             sender: string;
             /** Subject */

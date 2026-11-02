@@ -322,7 +322,6 @@ INCOMING = {
     "sender": "dana@example.org",
     "subject": "פגישה על התקציב",
     "summary": "השולח מבקש שיחה, ושואל גם על התקציב.",
-    "gmail_url": "https://mail.google.com/mail/?authuser=demo%40example.com#all/g-thread",
 }
 
 
@@ -333,7 +332,7 @@ def action_with(s: Setup, **changes: Any) -> Any:
     return action
 
 
-def test_adr_019_the_card_shows_sender_subject_summary_and_link(s: Setup) -> None:
+def test_adr_019_the_card_shows_sender_subject_and_summary(s: Setup) -> None:
     action_with(s, incoming=INCOMING)
     assert s.inbox.handle(msg(OWNER, "hi")) == "offered"
     [(_, card, _)] = s.sender.buttons

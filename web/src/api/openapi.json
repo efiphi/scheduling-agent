@@ -153,10 +153,6 @@
       "IncomingOut": {
         "description": "The email an action answers. Untrusted text, to show and never to act on (T19, T31).",
         "properties": {
-          "gmail_url": {
-            "title": "Gmail Url",
-            "type": "string"
-          },
           "sender": {
             "title": "Sender",
             "type": "string"
@@ -180,8 +176,7 @@
         "required": [
           "sender",
           "subject",
-          "summary",
-          "gmail_url"
+          "summary"
         ],
         "title": "IncomingOut",
         "type": "object"

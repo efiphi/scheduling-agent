@@ -47,7 +47,7 @@ def threats() -> dict[str, str]:
     return dict(_THREAT.findall(THREAT_MODEL.read_text(encoding="utf-8")))
 
 
-def tests_by_threat() -> dict[str, set[str]]:
+def named_tests() -> dict[str, set[str]]:
     found: dict[str, set[str]] = {}
     for root in TEST_ROOTS:
         for path in sorted((ROOT / root).rglob("*")):
@@ -65,7 +65,7 @@ def reasons() -> dict[str, str]:
 
 
 def rows() -> list[Row]:
-    tests = tests_by_threat()
+    tests = named_tests()
     attacks = json.loads(ATTACKS.read_text(encoding="utf-8"))["attacks"]
     written = reasons()
     return [

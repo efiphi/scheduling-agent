@@ -1,6 +1,6 @@
 """Every threat in the threat model has a test, an attack, or a written reason (ADR-020)."""
 
-from redteam.coverage import TABLE, Row, reasons, render, rows, tests_by_threat, threats
+from redteam.coverage import TABLE, Row, named_tests, reasons, render, rows, threats
 
 
 def test_the_threat_model_is_read_in_full() -> None:
@@ -23,7 +23,7 @@ def test_a_reason_is_only_for_a_threat_that_exists() -> None:
 
 
 def test_a_test_named_after_a_threat_points_at_a_real_one() -> None:
-    assert set(tests_by_threat()) <= set(threats())
+    assert set(named_tests()) <= set(threats())
 
 
 def test_the_committed_table_is_up_to_date() -> None:

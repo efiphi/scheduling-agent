@@ -95,3 +95,24 @@ def test_t20_every_base_image_is_pinned_by_digest(dockerfile: Path) -> None:
         base = re.match(r"FROM\s+(\S+)", line)
         if base:
             assert "@sha256:" in base[1], f"{dockerfile}: {line}"
+
+
+def test_t20_every_image_a_workflow_runs_is_pinned_by_digest() -> None:
+    # Images a workflow pulls and runs are named in an env value like ZAP_IMAGE.
+    images = [
+        (workflow.name, image)
+        for workflow in WORKFLOWS
+        for image in re.findall(r"_IMAGE:\s*(\S+)", workflow.read_text())
+    ]
+    assert images
+    for name, image in images:
+        assert "@sha256:" in image, f"{name}: {image}"
+
+
+def test_every_zap_exception_gives_a_reason() -> None:
+    # An exception with no reason is a finding someone silenced and nobody can review.
+    for rules in sorted((ROOT / "deploy" / "zap").glob("*.tsv")):
+        for line in rules.read_text().splitlines():
+            if line and not line.startswith("#"):
+                _rule, action, reason = line.split("\t")
+                assert action == "IGNORE" and reason.startswith("(") and len(reason) > 10, line

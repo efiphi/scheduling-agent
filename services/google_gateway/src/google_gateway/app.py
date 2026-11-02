@@ -34,7 +34,9 @@ _SECURITY_HEADERS = {
     "Cache-Control": "no-store",
     "Referrer-Policy": "no-referrer",
     # The page loads nothing: no scripts, no images, no frames, inline styles only.
-    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+    "Content-Security-Policy": (
+        "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
+    ),
     "X-Content-Type-Options": "nosniff",
 }
 

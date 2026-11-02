@@ -45,11 +45,17 @@ CALLBACK_PATH = "/auth/google/callback"
 
 SECURITY_HEADERS = {
     # JSON and two tiny pages: nothing to load, never framed (clickjacking), never cached.
-    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+    # base-uri and form-action do not fall back to default-src, so each is set here.
+    "Content-Security-Policy": (
+        "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    ),
     "X-Frame-Options": "DENY",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
     "Cache-Control": "no-store",
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Permissions-Policy": "camera=(), geolocation=(), microphone=(), payment=()",
 }
 
 

@@ -1,0 +1,11 @@
+# ZAP rules for the built web app: rule id, IGNORE, and why. Anything not listed fails the scan (ADR-020).
+# The web app has no production server yet. The headers below belong to that server, so these
+# rules go away when it exists (Layer 6). What the page itself can do, its CSP, is checked.
+10020	IGNORE	(Clickjacking header: belongs to the future server)
+10021	IGNORE	(Content-type options: belongs to the future server)
+10036	IGNORE	(Server version: the preview server in CI, not production)
+10049	IGNORE	(Caching: belongs to the future server)
+10063	IGNORE	(Permissions policy: belongs to the future server)
+90004	IGNORE	(Cross-origin isolation headers: belong to the future server)
+10109	IGNORE	(Informational: says this is a modern web app)
+10055	IGNORE	(frame-ancestors cannot be set in a meta tag: belongs to the future server)

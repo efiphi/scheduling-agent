@@ -37,8 +37,10 @@ MAX_PER_SENDER_PER_HOUR = 5
 class TaskRecord(StrictModel):
     user_id: UUID
     thread_id: UUID
-    # Untrusted text from the incoming email; reused only for the reply's "Re:" subject.
+    # Untrusted text from the incoming email: the reply's "Re:" subject, and what the user
+    # sees next to the approval (ADR-019). The sender is the parsed address, not the name.
     subject: str
+    sender: str = ""
 
 
 class PollCoordination(Protocol):
@@ -102,7 +104,10 @@ class RedisCoordination:
     def enqueue(self, task: EmailTask) -> None:
         # Recorded before the task is visible, so the agent can never ask about it first.
         record = TaskRecord(
-            user_id=task.user_id, thread_id=task.thread_id, subject=task.email.subject
+            user_id=task.user_id,
+            thread_id=task.thread_id,
+            subject=task.email.subject,
+            sender=task.email.sender,
         )
         self._redis.set(_task_key(task.task_id), record.model_dump_json(), ex=TASK_OWNER_SECONDS)
         self._redis.xadd(

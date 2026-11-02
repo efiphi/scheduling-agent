@@ -1,9 +1,11 @@
 """The pending action: the exact outgoing email, its hash, and when it expires (invariant 4).
 
 The payload is everything execution will do, frozen at creation: recipients, subject,
-body, slots. Its SHA-256 over a canonical JSON form is the content hash. An approval is
-bound to this hash (step 1.9), and execution recomputes it (step 1.10): if a single
-character changed, the approval no longer matches and nothing is sent (T3, T10).
+body, slots. It also holds what the user is shown about the incoming email, which
+execution never reads (ADR-019, T31). Its SHA-256 over a canonical JSON form is the content
+hash, so the approval covers what the user saw as well. An approval is bound to this hash
+(step 1.9), and execution recomputes it (step 1.10): if a single character changed,
+the approval no longer matches and nothing is sent (T3, T10).
 
 A pending action expires at the end of the nearest workday that has not ended yet, so an
 approval cannot be given days later for a slot that is long gone (E7).
@@ -13,10 +15,36 @@ import hashlib
 import json
 from datetime import datetime, time, timedelta
 from typing import Any
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from google_gateway.email_template import OutgoingEmail
+from shared.display import clean_line, safe_summary
 from shared.messages import AgentContext, Interval, ProposeSlots
+
+
+def incoming_context(
+    *,
+    sender: str,
+    subject: str,
+    summary: str | None,
+    gmail_thread_id: str,
+    user_email: str,
+) -> dict[str, Any]:
+    """What the user needs to know about the email being answered (ADR-019).
+
+    The summary is checked again here: the agent reads attacker-written email, so its checks
+    are not trusted (T31). The link is built here, from Google's thread id, not by the model.
+    """
+    return {
+        "sender": sender,
+        "subject": clean_line(subject),
+        "summary": safe_summary(summary),
+        "gmail_url": (
+            f"https://mail.google.com/mail/?authuser={quote(user_email, safe='')}"
+            f"#all/{quote(gmail_thread_id, safe='')}"
+        ),
+    }
 
 
 def reply_payload(
@@ -26,6 +54,7 @@ def reply_payload(
     recipients: tuple[str, ...],
     gmail_thread_id: str,
     time_zone: str,
+    incoming: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "kind": "reply_with_slots",
@@ -37,6 +66,7 @@ def reply_payload(
         "duration_minutes": decision.duration_minutes,
         "slots": [{"start": s.start.isoformat(), "end": s.end.isoformat()} for s in decision.slots],
         "time_zone": time_zone,
+        "incoming": incoming,
     }
 
 
@@ -55,6 +85,7 @@ def event_payload(
     incoming_subject: str,
     gmail_thread_id: str,
     time_zone: str,
+    incoming: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """A calendar event with a Meet link (UC-M2). Title and description come from code."""
     subject = " ".join(incoming_subject.split())  # untrusted: no line breaks, short
@@ -70,6 +101,7 @@ def event_payload(
         "duration_minutes": int((slot.end - slot.start).total_seconds() // 60),
         "slots": [{"start": slot.start.isoformat(), "end": slot.end.isoformat()}],
         "time_zone": time_zone,
+        "incoming": incoming,
     }
 
 

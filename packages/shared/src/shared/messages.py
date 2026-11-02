@@ -13,6 +13,8 @@ Design choices that carry security weight:
   nowhere to write an extra address.
 - The plan has no email body either: only slots and a short opening line. The gateway
   builds the email from a template and adds the disclosure line (invariant 10, ADR-012).
+- The plan's summary of the email is for the user's eyes only. Nothing reads it to decide
+  anything, and it never reaches an outgoing email (ADR-019, T31).
 - Free/busy carries intervals only: no titles, attendees or descriptions (invariant 5, E6).
 - Every time is timezone-aware; a naive "10:00" is rejected (E3).
 - Untrusted email text is a distinct type and has size limits (T1, T24).
@@ -24,6 +26,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field, StringConstraints, model_validator
 
+from shared.display import MAX_SUMMARY_CHARS
 from shared.schema import StrictModel
 
 SCHEMA_VERSION: Literal[1] = 1
@@ -119,6 +122,8 @@ class FreeBusyReply(StrictModel):
 # One short sentence. Content checks (links, addresses, commitments) are the policy
 # guard's job in google-gateway; the schema enforces the shape.
 OpeningLine = Annotated[str, StringConstraints(min_length=1, max_length=200, pattern=r"^[^\r\n]*$")]
+# What the email says, shown to the user next to the approval (ADR-019, T31).
+EmailSummary = Annotated[str, StringConstraints(min_length=1, max_length=MAX_SUMMARY_CHARS)]
 
 
 class ProposeSlots(StrictModel):
@@ -129,6 +134,7 @@ class ProposeSlots(StrictModel):
     duration_minutes: int = Field(ge=5, le=480)
     slots: tuple[Interval, ...] = Field(min_length=1, max_length=3)
     opening_line: OpeningLine
+    summary: EmailSummary | None = None
 
 
 class AskUser(StrictModel):
@@ -147,6 +153,7 @@ class ConfirmSlot(StrictModel):
 
     kind: Literal["confirm_slot"]
     slot_index: int = Field(ge=0, le=2)
+    summary: EmailSummary | None = None
 
 
 class NotAMeetingRequest(StrictModel):

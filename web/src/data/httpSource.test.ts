@@ -31,6 +31,13 @@ describe("HTTP data source", () => {
     expect(card.recipients).toEqual([{ email: "dana@example.org", isNew: false }]);
   });
 
+  it("maps the email an action answers (ADR-019)", async () => {
+    const incoming = { sender: "dana@example.org", subject: "Call?", summary: null, gmail_url: "https://mail.google.com/mail/#all/t" };
+    vi.stubGlobal("fetch", vi.fn(() => respond(200, [{ ...action, incoming }])));
+    const [card] = await createHttpSource().listPendingActions();
+    expect(card?.incoming).toEqual({ sender: "dana@example.org", subject: "Call?", summary: undefined, gmailUrl: incoming.gmail_url });
+  });
+
   it("sends the CSRF token and the hash with an approval (T10)", async () => {
     const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(() =>
       respond(200, { status: "approved" }),

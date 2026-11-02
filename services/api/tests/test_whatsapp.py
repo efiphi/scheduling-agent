@@ -15,6 +15,8 @@ from redis import Redis
 
 from api.main import Deps, WhatsAppDeps, create_app
 from api.whatsapp import (
+    DECIDE_ABOVE,
+    NO_SUMMARY,
     PAUSED_REPLY,
     STOP_FAILURE_LIMIT,
     VERIFIED_REPLY,
@@ -23,6 +25,7 @@ from api.whatsapp import (
     InboxState,
     hash_stop_code,
     parse_messages,
+    split_message,
     stop_code_matches,
     valid_signature,
 )
@@ -311,3 +314,60 @@ def test_the_public_webhook_app_exposes_nothing_but_the_webhook(s: Setup) -> Non
         ).status_code
         == 200
     )
+
+
+# --- The approval card (ADR-019) -------------------------------------------------------------
+
+INCOMING = {
+    "sender": "dana@example.org",
+    "subject": "פגישה על התקציב",
+    "summary": "השולח מבקש שיחה, ושואל גם על התקציב.",
+    "gmail_url": "https://mail.google.com/mail/?authuser=demo%40example.com#all/g-thread",
+}
+
+
+def action_with(s: Setup, **changes: Any) -> Any:
+    action_id = s.store.add_action(s.user)
+    _, action = s.store.actions_by_id[action_id]
+    action.payload.update(changes)
+    return action
+
+
+def test_adr_019_the_card_shows_sender_subject_summary_and_link(s: Setup) -> None:
+    action_with(s, incoming=INCOMING)
+    assert s.inbox.handle(msg(OWNER, "hi")) == "offered"
+    [(_, card, _)] = s.sender.buttons
+    for value in INCOMING.values():
+        assert value in card
+
+
+def test_adr_019_without_a_summary_the_card_says_to_read_the_original(s: Setup) -> None:
+    action_with(s, incoming={**INCOMING, "summary": None})
+    s.inbox.handle(msg(OWNER, "hi"))
+    [(_, card, _)] = s.sender.buttons
+    assert NO_SUMMARY in card
+
+
+def test_e10_an_action_from_before_the_summary_still_shows(s: Setup) -> None:
+    action_with(s)
+    assert s.inbox.handle(msg(OWNER, "hi")) == "offered"
+
+
+def test_e10_a_long_card_is_sent_whole_never_cut(s: Setup) -> None:
+    ending = "סוף-התקציר"
+    long_summary = "מילה " * 280 + ending  # over the 1024 a message with buttons may hold
+    action = action_with(s, incoming={**INCOMING, "summary": long_summary})
+    s.inbox.handle(msg(OWNER, "hi"))
+    assert ending in " ".join(text for _, text in s.sender.sent)
+    [(_, question, buttons)] = s.sender.buttons
+    assert question == DECIDE_ABOVE
+    # The buttons still approve exactly this content (invariant 4).
+    assert action.content_hash in buttons[0][0]
+
+
+def test_split_message_loses_nothing_and_respects_the_limit() -> None:
+    lines = ["א" * 30] * 400
+    parts = split_message("\n".join(lines), limit=100)
+    assert all(len(part) <= 100 for part in parts)
+    assert "".join(parts).replace("\n", "") == "".join(lines)
+    assert split_message("ב" * 250, limit=100) == ["ב" * 100, "ב" * 100, "ב" * 50]

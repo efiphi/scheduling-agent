@@ -7,6 +7,8 @@ module then checks every field in code before anything uses it:
 - the duration must be 5 to 480 minutes;
 - the opening line must be one short line with no address or link, or a fixed line from
   code replaces it (invariant 10: the email around it is built from a template).
+The summary is for the user's eyes only and is never cut: if it breaks the rules it is
+dropped whole (shared.display, ADR-019, T31).
 A refusal, a truncated answer, a form that does not validate, or a request the model marks
 as unclear all become a question to the user, never a guess (UC-M7).
 
@@ -24,13 +26,14 @@ from opentelemetry import trace
 from pydantic import BaseModel, Field, ValidationError
 
 from shared import tracing
+from shared.display import safe_summary
 from shared.messages import MAX_FREE_BUSY_WINDOW, AgentContext, UntrustedEmail
 
 _tracer = tracing.tracer(__name__)
 
 
 MODEL = "claude-haiku-5-5"
-MAX_TOKENS = 1024
+MAX_TOKENS = 2048  # room for a full summary of a long email
 DEFAULT_WINDOW_DAYS = 7
 MAX_OPENING_LINE = 200
 
@@ -81,6 +84,9 @@ class ExtractionForm(BaseModel):
     opening_line: str = Field(
         description="One short, polite opening sentence for the reply, in the email's language."
     )
+    summary: str = Field(
+        description="What the email says, for the user who decides on the reply, in Hebrew."
+    )
 
 
 # --- What the rest of the agent gets ----------------------------------------------------
@@ -94,6 +100,7 @@ class MeetingRequest:
     latest: date
     time_of_day: TimeOfDay
     opening_line: str
+    summary: str | None = None
 
 
 @dataclass(frozen=True)
@@ -106,6 +113,7 @@ class SlotChosen:
     """The other side picked offered slot number `index` (0-based) (UC-M2)."""
 
     index: int
+    summary: str | None = None
 
 
 @dataclass(frozen=True)
@@ -220,6 +228,13 @@ of them ("Tuesday works", "האפשרות השנייה מתאימה"), give its 
 that is not on the list, or several, leave it null and set unclear.
 - opening_line: one short, warm sentence in the email's language that starts a reply \
 offering times. Do not include times, dates, names, links, email addresses or promises.
+- summary: in Hebrew, whatever the email's language, so the user can decide without opening \
+the email. Cover the latest message: what the sender wants and every other topic or \
+request in it, above all anything beyond scheduling, which the reply will not answer. Use \
+as many full sentences as this takes: one for a short email, more for a long one, at most \
+1200 characters. Report what the sender wrote ("השולח מבקש..."); never address the reader, \
+and never advise approving or rejecting. Do not copy links, email addresses or phone \
+numbers: write that the email contains one.
 """
 
 
@@ -288,7 +303,7 @@ def _interpret(answer: ModelAnswer, context: AgentContext) -> Extraction:
     # A pick from the offered list comes first: "Tuesday works" may not read as a request.
     if form.chosen_option is not None and context.proposed_slots:
         if 1 <= form.chosen_option <= len(context.proposed_slots):
-            return SlotChosen(form.chosen_option - 1)
+            return SlotChosen(form.chosen_option - 1, safe_summary(form.summary))
         return _unclear("invalid_form")
     if not form.is_meeting_request:
         return NotAMeeting()
@@ -325,6 +340,7 @@ def _interpret(answer: ModelAnswer, context: AgentContext) -> Extraction:
         latest=latest,
         time_of_day=form.time_of_day,
         opening_line=_safe_opening(form.opening_line, form.language),
+        summary=safe_summary(form.summary),
     )
 
 

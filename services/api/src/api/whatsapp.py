@@ -63,6 +63,13 @@ DECISION_ERRORS = {
 # Button ids carry the action and, for approval, the hash of the exact content shown in
 # that message: pressing it approves that content and nothing else (invariant 4, T3).
 APPROVE_PREFIX, REJECT_PREFIX = "approve:", "reject:"
+# Meta's limits. Nothing the user decides on is ever cut (E10): a longer card goes out as
+# ordinary messages, followed by the buttons with a short question.
+BUTTONS_BODY_LIMIT = 1024
+TEXT_LIMIT = 4096
+SUMMARY_LABEL = "תקציר של הסוכן (נכתב מתוך תוכן חיצוני, לא מאומת):"
+NO_SUMMARY = "אין תקציר למייל הזה. כדאי לקרוא אותו במקור."
+DECIDE_ABOVE = "כל הפרטים בהודעה הקודמת. לאשר?"
 AGENT_PAUSED_REPLY = "הסוכן מושהה. חזרה לפעולה מהאפליקציה."
 
 _hasher = PasswordHasher()  # argon2id with the library's current recommended parameters
@@ -126,7 +133,7 @@ class MetaSender:
                 "type": "interactive",
                 "interactive": {
                     "type": "button",
-                    "body": {"text": text[:1024]},
+                    "body": {"text": text},
                     "action": {
                         "buttons": [
                             {"type": "reply", "reply": {"id": bid, "title": title[:20]}}
@@ -307,9 +314,14 @@ class Inbox:
 
     def offer(self, number: str, action: Any) -> None:
         """Send one pending action with Approve / Reject buttons (UC-W4)."""
+        card = preview(action)
+        if len(card) > BUTTONS_BODY_LIMIT:
+            for part in split_message(card):
+                self.sender.send_text(number, part)
+            card = DECIDE_ABOVE
         self.sender.send_buttons(
             number,
-            preview(action),
+            card,
             [
                 (f"{APPROVE_PREFIX}{action.action_id}:{action.content_hash}", "אשר"),
                 (f"{REJECT_PREFIX}{action.action_id}", "דחה"),
@@ -359,8 +371,33 @@ class Inbox:
         return "verified"
 
 
+def split_message(text: str, limit: int = TEXT_LIMIT) -> list[str]:
+    """Messages that together hold all of the text, broken between lines where possible."""
+    parts: list[str] = []
+    while len(text) > limit:
+        cut = text.rfind("\n", 1, limit + 1)
+        cut = cut if cut > 0 else limit
+        parts.append(text[:cut])
+        text = text[cut:].removeprefix("\n")
+    return [*parts, text]
+
+
+def _incoming_lines(incoming: Any) -> list[str]:
+    """The email being answered (ADR-019). Untrusted: labelled, and never acted on (T31)."""
+    if not isinstance(incoming, dict):
+        return []  # an action created before this existed
+    lines = [
+        "מייל מאת: " + str(incoming.get("sender", "")),
+        "נושא: " + str(incoming.get("subject", "")),
+    ]
+    summary = incoming.get("summary")
+    lines += ["", SUMMARY_LABEL, str(summary)] if summary else ["", NO_SUMMARY]
+    lines += ["", "המייל המקורי:", str(incoming.get("gmail_url", "")), "", "---", ""]
+    return lines
+
+
 def preview(action: Any) -> str:
-    """The card in one WhatsApp message: what, to whom, when, and the full text (E10, E5)."""
+    """The card: the email, what will be done, to whom, when, and the full text (E10, E5)."""
     payload = action.payload
     time_zone = str(payload.get("time_zone", "Asia/Jerusalem"))
     slots = [
@@ -372,6 +409,7 @@ def preview(action: Any) -> str:
         )
         for slot in payload.get("slots", [])
     ]
+    context = _incoming_lines(payload.get("incoming"))
     if action.kind == "create_event":
         lines = [
             "אירוע חדש ביומן, עם קישור Meet, מחכה לאישורך:",
@@ -383,7 +421,7 @@ def preview(action: Any) -> str:
     else:
         lines = ["תשובה חדשה מחכה לאישורך.", "", "נמענים: " + ", ".join(payload.get("to", [])), ""]
         lines += ["מועדים פנויים:", *slots, "", "המייל המלא:", "", str(payload.get("body", ""))]
-    return "\n".join(lines)[:1024]
+    return "\n".join(context + lines)
 
 
 @dataclass(frozen=True)

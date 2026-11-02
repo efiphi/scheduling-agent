@@ -37,6 +37,15 @@ export interface SourceMessage {
   text: string;
 }
 
+/** The email an action answers. Sender and summary are untrusted: text only (T19, T31). */
+export interface IncomingEmail {
+  sender: string;
+  subject: string;
+  /** Written by the model, for reading only. Missing when it broke the rules (ADR-019). */
+  summary?: string;
+  gmailUrl: string;
+}
+
 export interface PendingAction {
   id: string;
   kind: ActionKind;
@@ -46,6 +55,7 @@ export interface PendingAction {
   expiresAt: string;
   /** Hash of the exact action content; an approval is bound to it (T3, T10). */
   contentHash: string;
+  incoming?: IncomingEmail;
   recipients: Recipient[];
   slots: Slot[];
   /** Full draft as it will be sent, including the disclosure line (invariant 10). */

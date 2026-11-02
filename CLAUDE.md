@@ -9,7 +9,7 @@ This is a public portfolio project that should also work in daily use. It target
 The design docs live in `docs/` and are written in Hebrew. Read the relevant doc before working on any area.
 
 - `docs/01-use-cases.md` — what the system does (use cases UC-M*, UC-W*, UC-C*, UC-A*, settings, decisions)
-- `docs/02-threat-model.md` — attacks (T1–T30) and failures (E1–E13), with mitigations and priorities
+- `docs/02-threat-model.md` — attacks (T1–T31) and failures (E1–E13), with mitigations and priorities
 - `docs/03-architecture.md` — components, flows, data model, CI/CD, build layers, ADR list
 - `docs/04-web-app.md` — screens, states, web security, API endpoints
 
@@ -94,5 +94,7 @@ Python; LangGraph (ADR-002 alternatives: Claude Agent SDK, OpenAI Agents SDK); p
 Also decided (23.10, round two): two OAuth flows with the Gmail/Calendar callback on `google-gateway`; `agent` has no DB role; outbound email built from a template in `google-gateway`; stop code stored as HMAC with a pepper (superseded 25.10 by ADR-014: stop only from backup numbers + code, argon2id, plus a web pause button); `google-gateway` creates pending actions and `api` alone holds the Meta token; user deletion leaves only anonymized audit rows; skipped emails keep sender, subject and time only, for 7 days; `request_patterns` deferred (fixed anomaly rules in the MVP).
 
 Also decided (26.10, start of Layer 1): LLM = Claude Haiku 5.5 with structured outputs, verified on 10–15 synthetic Hebrew/English emails first, Sonnet 5.5 as the fallback (ADR-015); database access with SQLAlchemy + Alembic, RLS policies and GRANTs as explicit SQL in migrations; WhatsApp after the email → web-approval path.
+
+Also decided (2.11): the approval card shows the incoming email's sender, subject, a model summary that is never cut, and a Gmail link; the summary is display only (ADR-019, T31).
 
 Still open: whether to add a separate "reader" LLM in addition to key separation (to discuss with the security mentor).

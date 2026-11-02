@@ -41,7 +41,21 @@ flowchart LR
 - **Isolation in the database.** Row-level security, and a separate database role per service — with no admin rights and no way to bypass RLS.
 - **Emergency stop.** A secret code from a pre-registered backup phone, or a button in the web app, pauses the agent and cancels everything pending.
 
-The full list is in [`CLAUDE.md`](CLAUDE.md) (security invariants) and the threat model (`docs/02-threat-model.md`, attacks T1–T30 and failures E1–E13). Tests that cover a threat are named after it, e.g. `test_t1_unknown_field_rejects_the_whole_message`.
+The full list is in [`CLAUDE.md`](CLAUDE.md) (security invariants) and the threat model (`docs/02-threat-model.md`, attacks T1–T31 and failures E1–E13). Tests that cover a threat are named after it, e.g. `test_t1_unknown_field_rejects_the_whole_message`.
+
+## How it is tested
+
+Every threat in the threat model has a test, an attack or a written reason, in the generated [coverage table](docs/threat-coverage.md). On pull requests that touch the agent, and weekly, CI runs against the real model:
+
+- **Evals:** 42 synthetic emails in Hebrew and English, three times each. Quality must stay at 90%, and safety cases must pass every time.
+- **Red team:** 31 attack emails through the whole pipeline. One success in any run fails the check. What the checks found is in [`redteam/findings.md`](redteam/findings.md).
+
+OWASP ZAP scans the api and the web app passively, and the reasoning is in [ADR-020](docs/adr/020-evals-and-red-team-in-ci.md).
+
+```bash
+uv run --env-file deploy/compose/.env python -m evals.extraction.run   # about 5 cents
+uv run --env-file deploy/compose/.env python -m redteam.run            # about 3 cents
+```
 
 ## Repository layout
 
@@ -58,8 +72,9 @@ deploy/k3d/               Local Kubernetes cluster (k3s in Docker) for Layer 2
 deploy/compose/           Local stack: Postgres, Redis, api, google-gateway, gmail-poller,
                           calendar-responder, agent;
                           database roles and their tests
-evals/                    Synthetic emails that score the agent's understanding (run by hand)
-redteam/                  Attack emails from the threat model, run through the real pipeline
+evals/                    Synthetic emails that score the agent's understanding, in CI
+redteam/                  Attack emails from the threat model, run through the real pipeline,
+                          in CI; findings.md records what they found
 docs/                  Design docs (Hebrew): use cases, threat model, architecture, web app
 docs/adr/              Architecture decision records (English)
 .github/workflows/     CI
@@ -196,9 +211,9 @@ Each layer ends with something that works on its own.
 |---|---|---|
 | 0 — Skeleton | Repo, CI with secret scanning, UI structure, api service, hardened container, database roles | ✅ Done |
 | 1 — MVP core | Email → detection → slots → draft → approval → send + Meet event, on a demo account; WhatsApp | In progress |
-| 2 — Kubernetes and GitOps | k3d, Helm, Argo CD, network policies | Planned |
-| 3 — Observability | OpenTelemetry, Prometheus, Grafana, agent tracing | Planned |
-| 4 — Evals and red team | Hebrew/English eval set and the attack corpus, both in CI | Planned |
+| 2 — Kubernetes and GitOps | k3d, Helm, Argo CD, network policies | ✅ Done |
+| 3 — Observability | OpenTelemetry, Prometheus, Grafana, agent tracing | ✅ Done |
+| 4 — Evals and red team | Hebrew/English eval set and the attack corpus against the real model, OWASP ZAP, a threat coverage table, all in CI | ✅ Done |
 | 5 — Detection | Detection rules as code, alerts | Planned |
 | 6 — Cloud | Terraform on AWS, temporary environment | Planned |
 

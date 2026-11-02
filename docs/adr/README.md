@@ -23,3 +23,4 @@ Each significant decision is recorded as a short ADR: what was decided, why, wha
 | [017](017-whatsapp-channel.md) | The WhatsApp channel: signed webhook, inbound verification, one template | Accepted |
 | [018](018-observability.md) | Observability with OpenTelemetry and the Grafana stack, inside the cluster | Accepted |
 | [019](019-email-context-on-approvals.md) | Show the incoming email's context next to an approval | Accepted |
+| [020](020-evals-and-red-team-in-ci.md) | Evals and the red team in CI, with verdicts from code | Accepted |

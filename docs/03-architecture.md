@@ -182,7 +182,7 @@ GitHub Actions רץ על כל pull request. שלב שנכשל עוצר את הש
 | 1 — ליבה (MVP) | Gateway, Agent, API, אישורים בווטסאפ ובאפליקציה. הנתיב מקצה לקצה על חשבון דמו | AI, הנדסה |
 | 2 — Kubernetes ו-GitOps | k3d, Helm, Argo CD, network policies | DevOps, הנדסה |
 | 3 — תצפיתיות | OpenTelemetry, Prometheus, Grafana, מעקב אחרי הסוכן | DevOps, AI |
-| 4 — Evals ו-Red Team | שני הסטים רצים ב-CI | AI, סייבר |
+| 4 — Evals ו-Red Team | שני הסטים רצים ב-CI מול המודל האמיתי, סריקת ZAP וטבלת כיסוי (ADR-020) | AI, סייבר |
 | 5 — שכבת זיהוי | חוקי זיהוי כקוד, התראות, ובהמשך ניטור קלאסטר | סייבר |
 | 6 — ענן | Terraform ב-AWS, סביבה זמנית לסרטון | DevOps |
 | אחרי MVP | תיאום בין סוכנים, אוטונומיה הדרגתית | AI |

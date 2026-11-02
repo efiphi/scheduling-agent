@@ -68,7 +68,8 @@ Work strictly in the layers defined in `docs/03-architecture.md`. Do not jump ah
 - **Layer 1 — MVP core:** end-to-end thin path on a demo Gmail account: email → detection → slots → draft → approval → send + Meet event. *(done, 31.10)* Order: 1a email → web-app approval → reply in thread; 1b WhatsApp; 1c counterpart picks a slot → event with Meet.
 - **Layer 2 — Kubernetes + GitOps:** k3d, Helm chart, Sealed Secrets, NetworkPolicies, Argo CD + GHCR, CronJobs, CI gates. *(done, 31.10)*
 - **Layer 3 — observability:** live demo on the cluster, OpenTelemetry traces (one per email), agent run tracing, JSON logs, metrics, Grafana dashboards and alerts as code (ADR-018). *(done, 1.11)*
-- **Layers 4–6:** evals + red team in CI, detection layer, temporary cloud.
+- **Layer 4 — evals + red team in CI:** real-model evals and attacks with three repeats, OWASP ZAP passive scan, generated threat coverage table (ADR-020). *(done, 3.11)*
+- **Layers 5–6:** detection layer, temporary cloud.
 
 ## Conventions
 
@@ -96,5 +97,7 @@ Also decided (23.10, round two): two OAuth flows with the Gmail/Calendar callbac
 Also decided (26.10, start of Layer 1): LLM = Claude Haiku 5.5 with structured outputs, verified on 10–15 synthetic Hebrew/English emails first, Sonnet 5.5 as the fallback (ADR-015); database access with SQLAlchemy + Alembic, RLS policies and GRANTs as explicit SQL in migrations; WhatsApp after the email → web-approval path.
 
 Also decided (2.11): the approval card shows the incoming email's sender, subject, and a model summary that is never cut; the summary is display only (ADR-019, T31).
+
+Also decided (3.11): attacks and safety cases must pass every repeat, quality stays at 90%, verdicts come from code and not from another model; promptfoo and garak rejected for now (ADR-020).
 
 Still open: whether to add a separate "reader" LLM in addition to key separation (to discuss with the security mentor).

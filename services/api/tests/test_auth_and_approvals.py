@@ -231,3 +231,12 @@ def test_reject(s: Setup) -> None:
         s.client.post(f"/actions/{action}/reject", headers={"X-CSRF-Token": csrf}).status_code
         == 404
     )
+
+
+def test_t19_every_response_carries_the_security_headers(s: Setup) -> None:
+    headers = s.client.get("/healthz").headers
+    policy = headers["content-security-policy"]
+    for directive in ("default-src 'none'", "base-uri 'none'", "form-action 'none'"):
+        assert directive in policy
+    assert headers["cross-origin-resource-policy"] == "same-origin"
+    assert "camera=()" in headers["permissions-policy"]

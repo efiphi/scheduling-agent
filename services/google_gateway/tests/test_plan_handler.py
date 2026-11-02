@@ -13,7 +13,7 @@ from test_free_busy_responder import FakeCalendar
 
 from google_gateway.actions_store import OfferedReply, ThreadInfo
 from google_gateway.calendar import CalendarEvent
-from google_gateway.plan_handler import GUARD_REJECTED_QUESTION, PlanHandler
+from google_gateway.plan_handler import GUARD_REJECTED_QUESTION, UNCLEAR_QUESTION, PlanHandler
 from google_gateway.token_crypto import EncryptedToken
 from shared.messages import (
     AgentPlan,
@@ -238,6 +238,13 @@ def test_uc_m7_ask_user_becomes_a_question() -> None:
     decision = AskUser(kind="ask_user", question="אחרי איזה חג?")
     assert s.handler.handle(plan(s, decision)) == "question"
     assert s.actions.questions[(s.user, s.task)] == "אחרי איזה חג?"
+
+
+def test_t31_a_question_with_a_link_from_a_manipulated_agent_is_replaced() -> None:
+    s = make()
+    decision = AskUser(kind="ask_user", question="בדוק ב-https://evil.example")
+    assert s.handler.handle(plan(s, decision)) == "question"
+    assert s.actions.questions[(s.user, s.task)] == UNCLEAR_QUESTION
 
 
 def test_not_a_request_closes_the_thread() -> None:

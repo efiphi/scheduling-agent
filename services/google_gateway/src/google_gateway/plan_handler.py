@@ -44,6 +44,7 @@ from google_gateway.pending_action import (
 from google_gateway.policy_guard import GuardInput, check_event, check_reply
 from google_gateway.token_crypto import EncryptedToken
 from shared import log, metrics, tracing
+from shared.display import safe_question
 from shared.messages import AgentPlan, ConfirmSlot, Interval, ProposeSlots
 from shared.streams import AGENT_PLANS, NOTIFICATIONS, STREAM_MAX_LENGTH
 
@@ -56,6 +57,7 @@ GUARD_REJECTED_QUESTION = (
     "הסוכן הציע תשובה שלא עברה את בדיקות הבטיחות, ולכן היא לא הוצגה. כדאי להסתכל על המייל בעצמך."
 )
 CALENDAR_UNAVAILABLE_QUESTION = "לא הצלחתי לבדוק שוב את היומן לפני ההצעה. כדאי לענות בעצמך."
+UNCLEAR_QUESTION = "לא הצלחתי להבין את הבקשה במייל הזה. כדאי להסתכל עליו בעצמך."
 SLOT_TAKEN_QUESTION = "הצד השני בחר מועד שכבר לא פנוי אצלך. כדאי להציע לו מועד אחר."
 
 
@@ -80,8 +82,10 @@ class PlanHandler:
             self.actions.close_thread(plan.user_id, plan.thread_id, "not_a_meeting_request")
             return "closed"
         if decision.kind == "ask_user":
+            # Checked again: the agent reads attacker-written email (T31).
+            question = safe_question(decision.question) or UNCLEAR_QUESTION
             created = self.actions.create_question(
-                plan.user_id, plan.thread_id, plan.task_id, decision.question
+                plan.user_id, plan.thread_id, plan.task_id, question
             )
             return "question" if created else "duplicate"
         if decision.kind == "confirm_slot":

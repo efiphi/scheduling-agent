@@ -1,6 +1,12 @@
 import pytest
 
-from shared.display import MAX_SUMMARY_CHARS, clean_line, safe_summary
+from shared.display import (
+    MAX_QUESTION_CHARS,
+    MAX_SUMMARY_CHARS,
+    clean_line,
+    safe_question,
+    safe_summary,
+)
 
 
 def test_clean_line_removes_direction_tricks_and_line_breaks() -> None:
@@ -38,3 +44,9 @@ def test_t31_summary_too_long_is_dropped_never_cut() -> None:
 @pytest.mark.parametrize("text", [None, "", "  \n "])
 def test_empty_summary_is_none(text: str | None) -> None:
     assert safe_summary(text) is None
+
+
+def test_t31_a_question_with_a_link_or_too_long_is_dropped_never_cut() -> None:
+    assert safe_question("מתי לקבוע?") == "מתי לקבוע?"
+    assert safe_question("בדוק ב-https://evil.example") is None
+    assert safe_question("א" * (MAX_QUESTION_CHARS + 1)) is None

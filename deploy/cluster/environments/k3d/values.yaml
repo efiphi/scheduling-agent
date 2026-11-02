@@ -5,7 +5,7 @@
 # image by digest, so what runs is exactly what CI built and tested (T20). Do not edit
 # them by hand; to roll back, revert the commit that changed them.
 images:
-  api: ghcr.io/efiphi/scheduling-agent-api@sha256:b586e6204358766bc6b1e7a2a44b6677bb525bb83fb7fc6d488a695b669cdec6
-  gateway: ghcr.io/efiphi/scheduling-agent-gateway@sha256:a798af26504308cec0062c966c31d976158d0dfbd4edeebfb068608b7acd6684
-  agent: ghcr.io/efiphi/scheduling-agent-agent@sha256:0354d88d068cd0404f93f500bcecf1cafe67c489e3f27fc7cfbf1ea96acb6044
-  migrations: ghcr.io/efiphi/scheduling-agent-migrations@sha256:b886ce0bb8cb6142c9e0793310dd08d4ba4675ca7d1be4de339b8b9d4e793f27
+  api: ghcr.io/efiphi/scheduling-agent-api@sha256:ba9f68cb681fd49c59de86f415b66ce4696b7fb392f7d65205f252785b688f32
+  gateway: ghcr.io/efiphi/scheduling-agent-gateway@sha256:8cfbb367276609b048e8e7fda0d8d8547919144fef713c9234b789743a2c7560
+  agent: ghcr.io/efiphi/scheduling-agent-agent@sha256:b19cb0f9f2149b6527a1cce1d6e4a25c4f17d5c3654f4530c60c257c8cd4520e
+  migrations: ghcr.io/efiphi/scheduling-agent-migrations@sha256:77b074dc0eceb86201839095256684078b87fc50ef16cc39d5c5bcb4f9957e34

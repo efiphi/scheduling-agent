@@ -26,6 +26,16 @@
             "title": "Expires At",
             "type": "string"
           },
+          "incoming": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IncomingOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "kind": {
             "title": "Kind",
             "type": "string"
@@ -138,6 +148,42 @@
           "status"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "IncomingOut": {
+        "description": "The email an action answers. Untrusted text, to show and never to act on (T19, T31).",
+        "properties": {
+          "gmail_url": {
+            "title": "Gmail Url",
+            "type": "string"
+          },
+          "sender": {
+            "title": "Sender",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          }
+        },
+        "required": [
+          "sender",
+          "subject",
+          "summary",
+          "gmail_url"
+        ],
+        "title": "IncomingOut",
         "type": "object"
       },
       "Me": {

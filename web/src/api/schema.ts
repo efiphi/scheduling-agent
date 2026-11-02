@@ -341,6 +341,7 @@ export interface components {
              * Format: date-time
              */
             expires_at: string;
+            incoming?: components["schemas"]["IncomingOut"] | null;
             /** Kind */
             kind: string;
             /** Slots */
@@ -376,6 +377,20 @@ export interface components {
         Health: {
             /** Status */
             status: string;
+        };
+        /**
+         * IncomingOut
+         * @description The email an action answers. Untrusted text, to show and never to act on (T19, T31).
+         */
+        IncomingOut: {
+            /** Gmail Url */
+            gmail_url: string;
+            /** Sender */
+            sender: string;
+            /** Subject */
+            subject: string;
+            /** Summary */
+            summary: string | null;
         };
         /** Me */
         Me: {

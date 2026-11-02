@@ -163,6 +163,47 @@ def test_a_good_plan_becomes_one_pending_action_with_the_full_email() -> None:
     assert expiry == datetime(2026, 11, 2, 18, tzinfo=TZ)
 
 
+def with_summary(summary: str) -> ProposeSlots:
+    return PROPOSE.model_copy(update={"summary": summary})
+
+
+def test_adr_019_the_action_shows_who_wrote_about_what() -> None:
+    s = make()
+    s.handler.handle(plan(s, with_summary("השולח מבקש שיחה, ושואל גם על התקציב.")))
+    payload, _, _ = s.actions.actions[(s.user, s.task)]
+    incoming = payload["incoming"]
+    assert incoming["subject"] == "Quick call?"
+    assert incoming["sender"] == "dana@example.org"
+    assert incoming["summary"] == "השולח מבקש שיחה, ושואל גם על התקציב."
+    assert incoming["gmail_url"].startswith("https://mail.google.com/")
+    assert incoming["gmail_url"].endswith("#all/g-thread")
+
+
+def test_adr_019_the_hash_covers_what_the_user_saw() -> None:
+    first, second = make(), make()
+    first.handler.handle(plan(first, with_summary("תקציר אחד")))
+    second.handler.handle(plan(second, with_summary("תקציר אחר")))
+    (_, one, _) = first.actions.actions[(first.user, first.task)]
+    (_, other, _) = second.actions.actions[(second.user, second.task)]
+    assert one != other
+
+
+def test_t31_a_link_from_a_manipulated_agent_is_dropped_by_the_gateway() -> None:
+    s = make()
+    assert s.handler.handle(plan(s, with_summary("אשר ב-https://evil.example.com"))) == (
+        "pending_action"
+    )
+    payload, _, _ = s.actions.actions[(s.user, s.task)]
+    assert payload["incoming"]["summary"] is None
+
+
+def test_t31_the_summary_never_reaches_the_outgoing_email() -> None:
+    s = make()
+    s.handler.handle(plan(s, with_summary("סוד-שלא-ישלח")))
+    payload, _, _ = s.actions.actions[(s.user, s.task)]
+    assert "סוד-שלא-ישלח" not in payload["body"] + payload["subject"]
+
+
 def test_e8_the_same_plan_twice_creates_one_action() -> None:
     s = make()
     s.handler.handle(plan(s, PROPOSE))

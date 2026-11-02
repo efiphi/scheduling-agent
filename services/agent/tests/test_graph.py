@@ -107,14 +107,14 @@ _SPANS = InMemorySpanExporter()
 MARKER = "zebra-violet-quartz"  # a word that appears only in the synthetic email
 
 
-def traced_run(body: str) -> list[ReadableSpan]:
+def traced_run(body: str, filler: FakeFiller | None = None) -> list[ReadableSpan]:
     provider = tracing.configure("agent")
     if not getattr(provider, "_agent_test_exporter", False):
         provider.add_span_processor(SimpleSpanProcessor(_SPANS))
         provider._agent_test_exporter = True  # type: ignore[attr-defined]
     _SPANS.clear()
     with tracing.tracer("test").start_as_current_span("agent.task", context=tracing.new_trace()):
-        plan_for(FakeFiller(), FakeGateway(), body=body)
+        plan_for(filler or FakeFiller(), FakeGateway(), body=body)
     return list(_SPANS.get_finished_spans())
 
 
@@ -134,3 +134,10 @@ def test_t22_no_word_of_the_email_reaches_a_span() -> None:
     spans = traced_run(f"Hi, {MARKER} here. Can we meet on Tuesday? My number is 0501234567")
     recorded = " ".join(f"{s.name} {dict(s.attributes or {})}" for s in spans)
     assert MARKER not in recorded and "0501234567" not in recorded
+
+
+def test_t22_the_summary_of_the_email_reaches_no_span() -> None:
+    answer = ModelAnswer(form(summary=f"השולח כתב {MARKER}"), "end_turn", Usage(1, 1))
+    spans = traced_run("Can we meet next week?", FakeFiller(answer))
+    recorded = " ".join(f"{s.name} {dict(s.attributes or {})}" for s in spans)
+    assert MARKER not in recorded

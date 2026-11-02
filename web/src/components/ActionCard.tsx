@@ -3,7 +3,7 @@ import { Link } from "react-router";
 
 import { useDataSource } from "../data/context";
 
-import { actionKindLabel, type PendingAction } from "../domain/actions";
+import { actionKindLabel, type IncomingEmail, type PendingAction } from "../domain/actions";
 import { formatDateTime } from "../lib/time";
 import { PendingButton } from "./ui";
 import { SlotTime } from "./SlotTime";
@@ -59,6 +59,8 @@ export function ActionCard({
         </p>
       )}
 
+      {action.incoming && <IncomingEmailDetails email={action.incoming} />}
+
       {action.recipients.length > 0 && (
         <section aria-label="נמענים" className="mb-3">
           <ul className="space-y-1">
@@ -111,6 +113,36 @@ export function ActionCard({
 
       {expired ? <PendingButton>החזר לתור</PendingButton> : <ActionButtons action={action} onDecided={onDecided} />}
     </article>
+  );
+}
+
+// The email this action answers, so the decision does not need another screen (ADR-019).
+// The link is built by the gateway; anything else is not made clickable (T19, T31).
+function IncomingEmailDetails({ email }: { email: IncomingEmail }) {
+  return (
+    <section aria-label="המייל שהתקבל" className="mb-3 rounded-lg bg-slate-50 p-3 text-sm">
+      <p>
+        <span className="font-semibold">מאת: </span>
+        <bdi>{email.sender}</bdi>
+      </p>
+      <p dir="auto">
+        <span className="font-semibold">נושא: </span>
+        {email.subject}
+      </p>
+      {email.summary ? (
+        <>
+          <p className="mt-2 text-xs text-slate-600">תקציר של הסוכן (נכתב מתוך תוכן חיצוני, לא מאומת):</p>
+          <p dir="auto">{email.summary}</p>
+        </>
+      ) : (
+        <p className="mt-2 text-slate-700">אין תקציר למייל הזה. כדאי לקרוא אותו במקור.</p>
+      )}
+      {email.gmailUrl.startsWith("https://mail.google.com/") && (
+        <a href={email.gmailUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-blue-700 underline">
+          למייל המקורי
+        </a>
+      )}
+    </section>
   );
 }
 

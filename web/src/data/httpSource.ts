@@ -37,6 +37,14 @@ export function toPendingAction(a: ActionOut): PendingAction {
     createdAt: a.created_at,
     expiresAt: a.expires_at,
     contentHash: a.content_hash,
+    incoming: a.incoming
+      ? {
+          sender: a.incoming.sender,
+          subject: a.incoming.subject,
+          summary: a.incoming.summary ?? undefined,
+          gmailUrl: a.incoming.gmail_url,
+        }
+      : undefined,
     // Recipients always come from the thread (T5), so none is new.
     recipients: a.to.map((email) => ({ email, isNew: false })),
     slots: a.slots.map((s) => ({ start: s.start, end: s.end })),

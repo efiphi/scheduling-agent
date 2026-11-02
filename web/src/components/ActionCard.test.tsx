@@ -11,7 +11,31 @@ function renderCard(action: PendingAction) {
   return render(<RouterProvider router={router} />);
 }
 
+const incoming = {
+  sender: "dana@example.org",
+  subject: "שיחה על התקציב",
+  summary: "השולח מבקש שיחה, ושואל גם על התקציב.",
+  gmailUrl: "https://mail.google.com/mail/#all/t",
+};
+
 describe("action card", () => {
+  it("shows who wrote, about what, and links to the original (ADR-019)", () => {
+    renderCard(makeAction({ incoming }));
+    expect(screen.getByText(incoming.sender)).toBeTruthy();
+    expect(screen.getByText(incoming.summary)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "למייל המקורי" }).getAttribute("href")).toBe(incoming.gmailUrl);
+  });
+
+  it("test_t31_a_link_not_to_gmail_is_not_clickable", () => {
+    renderCard(makeAction({ incoming: { ...incoming, gmailUrl: "https://evil.example.com/" } }));
+    expect(screen.queryByRole("link", { name: "למייל המקורי" })).toBeNull();
+  });
+
+  it("says to read the original when there is no summary", () => {
+    renderCard(makeAction({ incoming: { ...incoming, summary: undefined } }));
+    expect(screen.getByText("אין תקציר למייל הזה. כדאי לקרוא אותו במקור.")).toBeTruthy();
+  });
+
   it("test_t5_new_recipient_is_tagged", () => {
     renderCard(
       makeAction({

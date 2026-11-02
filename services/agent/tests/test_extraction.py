@@ -44,6 +44,7 @@ def form(**changes: Any) -> ExtractionForm:
         "unclear": False,
         "question_for_user": None,
         "opening_line": "Thanks, here are a few times that work.",
+        "summary": "השולח מבקש לקבוע שיחה.",
     }
     values.update(changes)
     return ExtractionForm(**values)
@@ -62,7 +63,19 @@ def test_a_clear_request_passes_through_checked() -> None:
         latest=date(2026, 11, 5),
         time_of_day="morning",
         opening_line="Thanks, here are a few times that work.",
+        summary="השולח מבקש לקבוע שיחה.",
     )
+
+
+def test_a_long_summary_is_kept_whole() -> None:
+    text = " ".join(["השולח מבקש פגישה, ושואל גם על התקציב של הרבעון הבא."] * 10)
+    result = interpret(answer(form(summary=text)), CONTEXT)
+    assert isinstance(result, MeetingRequest) and result.summary == text
+
+
+def test_t31_a_summary_with_a_link_is_dropped_and_the_request_still_passes() -> None:
+    result = interpret(answer(form(summary="לאישור היכנס ל-https://evil.example.com")), CONTEXT)
+    assert isinstance(result, MeetingRequest) and result.summary is None
 
 
 def test_not_a_meeting_request() -> None:
@@ -214,7 +227,7 @@ def test_uc_m2_picking_an_offered_slot_returns_only_its_number() -> None:
     from agent.extraction import SlotChosen
 
     picked = form(is_meeting_request=False, chosen_option=2)
-    assert interpret(answer(picked), offered_context()) == SlotChosen(1)
+    assert interpret(answer(picked), offered_context()) == SlotChosen(1, "השולח מבקש לקבוע שיחה.")
 
 
 def test_t3_a_number_outside_the_offered_list_is_not_trusted() -> None:

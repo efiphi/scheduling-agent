@@ -70,6 +70,15 @@ class SlotOut(BaseModel):
     end: datetime
 
 
+class IncomingOut(BaseModel):
+    """The email an action answers. Untrusted text, to show and never to act on (T19, T31)."""
+
+    sender: str
+    subject: str
+    summary: str | None
+    gmail_url: str
+
+
 class ActionOut(BaseModel):
     action_id: UUID
     kind: str
@@ -78,6 +87,7 @@ class ActionOut(BaseModel):
     subject: str
     body: str
     slots: list[SlotOut]
+    incoming: IncomingOut | None = None
     content_hash: str
     expires_at: datetime
     created_at: datetime
@@ -456,6 +466,7 @@ def _out(action: Any) -> ActionOut:
         subject=str(payload.get("subject", "")),
         body=str(payload.get("body", "")),
         slots=[SlotOut(**slot) for slot in payload.get("slots", [])],
+        incoming=IncomingOut(**payload["incoming"]) if payload.get("incoming") else None,
         content_hash=action.content_hash,
         expires_at=action.expires_at,
         created_at=action.created_at,

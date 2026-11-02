@@ -30,11 +30,17 @@ from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from google_gateway.actions_store import ActionStore
 from google_gateway.calendar import busy_intervals
-from google_gateway.coordination import PollCoordination
+from google_gateway.coordination import PollCoordination, TaskRecord
 from google_gateway.email_template import build_reply
 from google_gateway.free_busy_responder import OpenCalendar
 from google_gateway.mail_store import MailStore
-from google_gateway.pending_action import content_hash, event_payload, expires_at, reply_payload
+from google_gateway.pending_action import (
+    content_hash,
+    event_payload,
+    expires_at,
+    incoming_context,
+    reply_payload,
+)
 from google_gateway.policy_guard import GuardInput, check_event, check_reply
 from google_gateway.token_crypto import EncryptedToken
 from shared import log, metrics, tracing
@@ -79,10 +85,10 @@ class PlanHandler:
             )
             return "question" if created else "duplicate"
         if decision.kind == "confirm_slot":
-            return self._confirm(plan, decision, record.subject)
-        return self._propose(plan, decision, record.subject)
+            return self._confirm(plan, decision, record)
+        return self._propose(plan, decision, record)
 
-    def _confirm(self, plan: AgentPlan, decision: ConfirmSlot, subject: str) -> str:
+    def _confirm(self, plan: AgentPlan, decision: ConfirmSlot, record: TaskRecord) -> str:
         """UC-M2: the other side picked an offered slot. The time comes from our records."""
         user, thread_id = plan.user_id, plan.thread_id
         mailbox = self.mail.mailbox(user)
@@ -128,9 +134,16 @@ class PlanHandler:
             slot=slot,
             language=offered.language,
             attendees=result.recipients,
-            incoming_subject=subject,
+            incoming_subject=record.subject,
             gmail_thread_id=thread.gmail_thread_id,
             time_zone=context.time_zone,
+            incoming=incoming_context(
+                sender=record.sender,
+                subject=record.subject,
+                summary=decision.summary,
+                gmail_thread_id=thread.gmail_thread_id,
+                user_email=mailbox.email,
+            ),
         )
         action_id = self.actions.create_reply_action(
             user,
@@ -146,7 +159,7 @@ class PlanHandler:
         self.notify(user, action_id)
         return "pending_action"
 
-    def _propose(self, plan: AgentPlan, decision: ProposeSlots, subject: str) -> str:
+    def _propose(self, plan: AgentPlan, decision: ProposeSlots, record: TaskRecord) -> str:
         user, thread_id = plan.user_id, plan.thread_id
         mailbox = self.mail.mailbox(user)
         thread = self.actions.thread(user, thread_id)
@@ -187,7 +200,7 @@ class PlanHandler:
             slots=decision.slots,
             duration_minutes=decision.duration_minutes,
             time_zone=context.time_zone,
-            incoming_subject=subject,
+            incoming_subject=record.subject,
         )
         payload = reply_payload(
             decision=decision,
@@ -195,6 +208,13 @@ class PlanHandler:
             recipients=result.recipients,
             gmail_thread_id=thread.gmail_thread_id,
             time_zone=context.time_zone,
+            incoming=incoming_context(
+                sender=record.sender,
+                subject=record.subject,
+                summary=decision.summary,
+                gmail_thread_id=thread.gmail_thread_id,
+                user_email=mailbox.email,
+            ),
         )
         action_id = self.actions.create_reply_action(
             user,

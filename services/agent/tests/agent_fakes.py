@@ -62,6 +62,7 @@ def form(**changes: Any) -> ExtractionForm:
         "unclear": False,
         "question_for_user": None,
         "opening_line": "Thanks, here are a few times that work.",
+        "summary": "השולח מבקש לקבוע שיחה.",
     }
     values.update(changes)
     return ExtractionForm(**values)

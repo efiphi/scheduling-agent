@@ -181,5 +181,8 @@ class FakeCoordination:
         if task is None:
             return None
         return TaskRecord(
-            user_id=task.user_id, thread_id=task.thread_id, subject=task.email.subject
+            user_id=task.user_id,
+            thread_id=task.thread_id,
+            sender=task.email.sender,
+            subject=task.email.subject,
         )

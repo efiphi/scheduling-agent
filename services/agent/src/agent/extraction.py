@@ -232,9 +232,10 @@ offering times. Do not include times, dates, names, links, email addresses or pr
 the email. Cover the latest message: what the sender wants and every other topic or \
 request in it, above all anything beyond scheduling, which the reply will not answer. Use \
 as many full sentences as this takes: one for a short email, more for a long one, at most \
-1200 characters. Report what the sender wrote ("השולח מבקש..."); never address the reader, \
-and never advise approving or rejecting. Do not copy links, email addresses or phone \
-numbers: write that the email contains one.
+1200 characters. Report what the sender wrote, always as "השולח" in the masculine: do not \
+guess a gender, and do not judge whether a claim is true. Never address the reader, and \
+never advise approving or rejecting. Never copy a link, an email address or a phone \
+number. Mention one only if the email really contains it; otherwise say nothing about them.
 """
 
 

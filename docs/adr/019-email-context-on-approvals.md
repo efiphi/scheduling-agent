@@ -42,6 +42,6 @@ On WhatsApp, a message with buttons holds at most 1,024 characters, and the old 
 - **Positive:** the user can decide from the card, and sees when an email asks for more than a meeting.
 - **Negative:** a manipulated summary can still mislead. The damage is limited to the user approving a reply with slots, which passes the policy guard as usual, and the original is one tap away.
 - **Negative:** text derived from third-party email is now stored in `pending_actions` and passes through Meta, as the outgoing reply already does. Logs and traces stay free of it (T22).
-- **Negative:** about 100-300 more output tokens per email. `MAX_TOKENS` goes from 1024 to 2048 so that a long summary does not truncate the form.
+- **Negative:** about 350-450 more output tokens per email, measured on two test emails (272 before, 613 and 721 after), which at Haiku prices is about $0.0002 per email. `MAX_TOKENS` goes from 1024 to 2048 so that a long summary does not truncate the form.
 - **Not covered yet:** questions to the user (UC-M7) still show no email context.
 - **To check:** red-team cases for T31 go into Layer 4.

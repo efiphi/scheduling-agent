@@ -23,7 +23,7 @@ The threat model also promises to prove that the defenses work, not only to stat
 
 **CI, in two separate workflows.** `model-checks.yml` calls the model and costs about 8 cents a run. `security-scan.yml` runs OWASP ZAP passively against the api and the built web app. Both run on relevant pull requests and once a week, since a model or scanner rules can change with no change of ours. Each always reports, and spends only when the change touches what it checks.
 
-**The API key:** a separate key in its own workspace with a spending limit, kept in the `model-evals` GitHub environment and limited to our branch names. It reaches only the two steps that call the model, the job can only read the repository, and pull requests from forks are skipped.
+**The API key:** a separate key in its own workspace with a spending limit, kept in the `model-evals` GitHub environment, usable only from `main` and from pull requests. It reaches only the two steps that call the model, the job can only read the repository, and pull requests from forks are skipped, since GitHub gives them no secrets anyway.
 
 **A coverage table.** `docs/threat-coverage.md` is generated from the threat model, the test names and the attacks. CI fails if it is stale, or if a threat has neither a test, an attack nor a written reason.
 

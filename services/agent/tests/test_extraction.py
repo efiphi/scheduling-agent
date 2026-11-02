@@ -250,3 +250,18 @@ def test_t31_a_question_with_a_link_becomes_a_fixed_question() -> None:
     bad = form(unclear=True, question_for_user="בדוק ב-https://evil.example")
     result = interpret(answer(bad), CONTEXT)
     assert isinstance(result, Unclear) and "evil" not in result.question
+
+
+def test_t23_the_model_gets_only_the_email_and_the_date() -> None:
+    email = UntrustedEmail(
+        gmail_message_id="m-secret-id",
+        sender="sender@example.org",
+        subject=UntrustedText("Call?"),
+        body_text=UntrustedText("Tuesday?"),
+        received_at=CONTEXT.now,
+    )
+    message = build_user_message(email, CONTEXT)
+    assert "Tuesday?" in message and "m-secret-id" not in message
+    # The user's working hours and defaults are applied in code, after the model answered.
+    assert CONTEXT.work_start.isoformat() not in message
+    assert f"{CONTEXT.work_end:%H:%M}" not in message

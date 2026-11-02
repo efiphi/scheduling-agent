@@ -99,7 +99,7 @@ def test_hebrew_gmail_reply_header_ends_the_new_part() -> None:
         ("Recall of product", "a recall notice"),  # "call" inside a word is not a match
     ],
 )
-def test_unrelated_email_is_skipped_and_recorded(subject: str, body: str) -> None:
+def test_e9_unrelated_email_is_skipped_and_recorded(subject: str, body: str) -> None:
     decision = decide(meta(subject=subject), body)
     assert decision.reason is Reason.NO_MATCH
     assert not decision.passes

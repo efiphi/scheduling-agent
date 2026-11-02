@@ -1,5 +1,6 @@
 """Checks on the repository itself, for mistakes that only show up in a Docker build."""
 
+import re
 import tomllib
 from pathlib import Path
 
@@ -73,3 +74,24 @@ def test_t22_metrics_carry_only_low_cardinality_attributes() -> None:
                 found.append((f"{path.name}:{node.lineno}", keys))
     assert len(found) >= 8  # the recordings exist
     assert [(where, keys) for where, keys in found if not keys <= ALLOWED_ATTRIBUTES] == []
+
+
+WORKFLOWS = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
+
+
+def test_t20_every_github_action_is_pinned_to_a_commit() -> None:
+    # A tag can be moved to malicious code later; a commit hash cannot.
+    assert WORKFLOWS
+    for workflow in WORKFLOWS:
+        for line in workflow.read_text().splitlines():
+            action = re.match(r"\s*-?\s*uses:\s*([^\s#]+)", line)
+            if action and not action[1].startswith("./"):
+                assert re.search(r"@[0-9a-f]{40}$", action[1]), f"{workflow.name}: {action[1]}"
+
+
+@pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=lambda p: str(p.relative_to(ROOT)))
+def test_t20_every_base_image_is_pinned_by_digest(dockerfile: Path) -> None:
+    for line in dockerfile.read_text().splitlines():
+        base = re.match(r"FROM\s+(\S+)", line)
+        if base:
+            assert "@sha256:" in base[1], f"{dockerfile}: {line}"

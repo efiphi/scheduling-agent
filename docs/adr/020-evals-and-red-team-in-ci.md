@@ -15,7 +15,7 @@ The threat model also promises to prove that the defenses work, not only to stat
 **Three repeats, two kinds of case.** A model can answer the same email differently from run to run, so every case runs three times.
 
 - Safety cases and attacks must pass every repeat. One success counts, because an attacker can send the email again.
-- Everything else feeds a quality score that must stay at 90% or above. Measured at 95.6%–97.4%, so there is room for variance without hiding a real drop.
+- Everything else feeds a quality score that must stay at 90% or above. Measured at 94.7%–97.4% over five runs, so there is room for variance without hiding a real drop.
 
 **Verdicts come from code, not from another model.** Fixed rules make a result reproducible and cheap, and a person can argue with them. The scorers have their own tests, since a broken scorer could hide a successful attack.
 

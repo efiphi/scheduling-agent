@@ -175,8 +175,6 @@ def test_adr_019_the_action_shows_who_wrote_about_what() -> None:
     assert incoming["subject"] == "Quick call?"
     assert incoming["sender"] == "dana@example.org"
     assert incoming["summary"] == "השולח מבקש שיחה, ושואל גם על התקציב."
-    assert incoming["gmail_url"].startswith("https://mail.google.com/")
-    assert incoming["gmail_url"].endswith("#all/g-thread")
 
 
 def test_adr_019_the_hash_covers_what_the_user_saw() -> None:

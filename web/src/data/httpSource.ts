@@ -42,7 +42,6 @@ export function toPendingAction(a: ActionOut): PendingAction {
           sender: a.incoming.sender,
           subject: a.incoming.subject,
           summary: a.incoming.summary ?? undefined,
-          gmailUrl: a.incoming.gmail_url,
         }
       : undefined,
     // Recipients always come from the thread (T5), so none is new.

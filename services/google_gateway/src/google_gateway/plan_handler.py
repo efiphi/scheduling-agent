@@ -141,8 +141,6 @@ class PlanHandler:
                 sender=record.sender,
                 subject=record.subject,
                 summary=decision.summary,
-                gmail_thread_id=thread.gmail_thread_id,
-                user_email=mailbox.email,
             ),
         )
         action_id = self.actions.create_reply_action(
@@ -212,8 +210,6 @@ class PlanHandler:
                 sender=record.sender,
                 subject=record.subject,
                 summary=decision.summary,
-                gmail_thread_id=thread.gmail_thread_id,
-                user_email=mailbox.email,
             ),
         )
         action_id = self.actions.create_reply_action(

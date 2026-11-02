@@ -43,7 +43,6 @@ export interface IncomingEmail {
   subject: string;
   /** Written by the model, for reading only. Missing when it broke the rules (ADR-019). */
   summary?: string;
-  gmailUrl: string;
 }
 
 export interface PendingAction {

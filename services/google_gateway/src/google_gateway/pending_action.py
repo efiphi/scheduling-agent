@@ -15,7 +15,6 @@ import hashlib
 import json
 from datetime import datetime, time, timedelta
 from typing import Any
-from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from google_gateway.email_template import OutgoingEmail
@@ -28,22 +27,16 @@ def incoming_context(
     sender: str,
     subject: str,
     summary: str | None,
-    gmail_thread_id: str,
-    user_email: str,
 ) -> dict[str, Any]:
     """What the user needs to know about the email being answered (ADR-019).
 
     The summary is checked again here: the agent reads attacker-written email, so its checks
-    are not trusted (T31). The link is built here, from Google's thread id, not by the model.
+    are not trusted (T31).
     """
     return {
         "sender": sender,
         "subject": clean_line(subject),
         "summary": safe_summary(summary),
-        "gmail_url": (
-            f"https://mail.google.com/mail/?authuser={quote(user_email, safe='')}"
-            f"#all/{quote(gmail_thread_id, safe='')}"
-        ),
     }
 
 

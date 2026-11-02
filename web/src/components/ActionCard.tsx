@@ -117,7 +117,7 @@ export function ActionCard({
 }
 
 // The email this action answers, so the decision does not need another screen (ADR-019).
-// The link is built by the gateway; anything else is not made clickable (T19, T31).
+// All of it is plain text (T19, T31).
 function IncomingEmailDetails({ email }: { email: IncomingEmail }) {
   return (
     <section aria-label="המייל שהתקבל" className="mb-3 rounded-lg bg-slate-50 p-3 text-sm">
@@ -136,11 +136,6 @@ function IncomingEmailDetails({ email }: { email: IncomingEmail }) {
         </>
       ) : (
         <p className="mt-2 text-slate-700">אין תקציר למייל הזה. כדאי לקרוא אותו במקור.</p>
-      )}
-      {email.gmailUrl.startsWith("https://mail.google.com/") && (
-        <a href={email.gmailUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-blue-700 underline">
-          למייל המקורי
-        </a>
       )}
     </section>
   );

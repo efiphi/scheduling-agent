@@ -26,7 +26,7 @@ from opentelemetry import trace
 from pydantic import BaseModel, Field, ValidationError
 
 from shared import tracing
-from shared.display import safe_summary
+from shared.display import safe_question, safe_summary
 from shared.messages import MAX_FREE_BUSY_WINDOW, AgentContext, UntrustedEmail
 
 _tracer = tracing.tracer(__name__)
@@ -309,7 +309,7 @@ def _interpret(answer: ModelAnswer, context: AgentContext) -> Extraction:
     if not form.is_meeting_request:
         return NotAMeeting()
     if form.unclear:
-        question = (form.question_for_user or "").strip()[:300] or _QUESTIONS["invalid_form"]
+        question = safe_question(form.question_for_user) or _QUESTIONS["invalid_form"]
         return Unclear(question, "model_unclear")
 
     today = today_in(context)

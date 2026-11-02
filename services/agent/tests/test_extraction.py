@@ -244,3 +244,9 @@ def test_the_prompt_lists_the_offered_times_in_local_time() -> None:
     message = build_user_message(email("Tuesday works"), offered_context())
     assert "1. Tuesday 2026-11-03 10:00-10:30" in message
     assert "2. Tuesday 2026-11-03 12:00-12:30" in message
+
+
+def test_t31_a_question_with_a_link_becomes_a_fixed_question() -> None:
+    bad = form(unclear=True, question_for_user="בדוק ב-https://evil.example")
+    result = interpret(answer(bad), CONTEXT)
+    assert isinstance(result, Unclear) and "evil" not in result.question

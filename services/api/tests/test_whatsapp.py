@@ -23,6 +23,7 @@ from api.whatsapp import (
     Inbound,
     Inbox,
     InboxState,
+    Notifier,
     hash_stop_code,
     parse_messages,
     split_message,
@@ -232,7 +233,7 @@ def payload(sender: str, text: str) -> dict[str, Any]:
     return {"entry": [{"changes": [{"value": {"messages": [message]}}]}]}
 
 
-def test_t8_a_webhook_without_metas_signature_is_refused_unread(s: Setup) -> None:
+def test_t9_a_webhook_without_metas_signature_is_refused_unread(s: Setup) -> None:
     body = json.dumps(payload(OWNER, "purple elephant 42")).encode()
     client = webhook_client(s)
     assert (
@@ -370,3 +371,24 @@ def test_split_message_loses_nothing_and_respects_the_limit() -> None:
     assert all(len(part) <= 100 for part in parts)
     assert "".join(parts).replace("\n", "") == "".join(lines)
     assert split_message("ב" * 250, limit=100) == ["ב" * 100, "ב" * 100, "ב" * 50]
+
+
+def test_e2_the_card_shows_every_recipients_full_address(s: Setup) -> None:
+    action_with(s, to=["dana@example.org", "dani@example.net"])
+    s.inbox.handle(msg(OWNER, "hi"))
+    [(_, card, _)] = s.sender.buttons
+    assert "dana@example.org" in card and "dani@example.net" in card
+
+
+def test_t27_the_agent_writes_only_to_a_registered_number(s: Setup) -> None:
+    other_user = s.store.add_user()
+    action_id = s.store.add_action(other_user)
+    notifier = Notifier(
+        store=s.store,
+        state=cast(InboxState, s.state),
+        inbox=s.inbox,
+        sender=s.sender,
+        template=None,
+    )
+    assert notifier.notify(other_user, action_id) == "no_whatsapp"
+    assert s.sender.sent == [] and s.sender.buttons == [] and s.sender.templates == []

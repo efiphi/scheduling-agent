@@ -1,0 +1,9 @@
+{
+  "_comment": "Threats with no test and no attack, and why. A reason must stay true: tests/test_threat_coverage.py fails when a threat here also has a test.",
+  "reasons": {
+    "T12": "A person is the target, so code cannot prove the result. What code can do is covered under T5 and E2: new recipients are tagged and full addresses shown.",
+    "T30": "Accepted on purpose: emails disclose that an agent sent them (invariant 10), and T1-T7 must hold anyway. There is nothing to test.",
+    "E11": "No cancelling or moving events yet: the only actions are a reply and a new event. Needs tests when UC-M4 and UC-M5 are built.",
+    "E12": "A human factor. Measuring it needs real use over time, and the MVP has no such data."
+  }
+}

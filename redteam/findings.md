@@ -6,6 +6,7 @@ No attack in the corpus has got anything out of the pipeline so far: 31 of 31 bl
 
 | Date | Threat | What was found | How | Fix |
 |---|---|---|---|---|
+| 18.11 | T9, all security rules | A burst of forged webhooks fired no alert: the counter was created by the first event, so Prometheus first saw it at 6 and `increase()` counted nothing. Every rule had this blind spot for the first burst after a restart | `deploy/k3d/test-detections.sh`, a real attack on the cluster. The rule unit tests passed, because their series start at 0 | Every process starts each kind's counter at 0 (#74) |
 | 2.11 | T31 | The model's question to the user was checked less than the summary: it could carry a link or a phone number, and a long one was cut mid-sentence | Reading the code while writing attacks. No attack had got through | Both the agent and the gateway replace it with a fixed question (#60) |
 | 2.11 | T19 | The web app had no Content-Security-Policy | ZAP | A CSP in the built page (#63) |
 | 2.11 | T19 | The api's CSP left `base-uri` and `form-action` open, which do not fall back to `default-src`. No `Permissions-Policy` or `Cross-Origin-Resource-Policy` | ZAP | Headers added on the api and the gateway (#63) |

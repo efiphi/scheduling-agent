@@ -1,6 +1,8 @@
 # Unit tests for rules.yml: promtool test rules rules_test.yml (CI, ADR-022).
 # Each test feeds a synthetic series and says which alerts must fire, or that none may.
 # Test names follow the threat they cover, so docs/threat-coverage.md counts them.
+# Series start at 0 because every process primes its counters at 0 (shared/security.py):
+# without that, a series first seen at 6 shows no increase() at all.
 rule_files: [rules.yml]
 evaluation_interval: 1m
 

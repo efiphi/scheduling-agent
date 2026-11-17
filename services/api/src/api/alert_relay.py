@@ -78,14 +78,15 @@ class AlertRelay:
             return "capped"
         text = message_for(alert)
         if self.state.window_open(self.owner_id):
-            self.sender.send_text(self.owner_number, text)
-            return "sent"
+            ok = self.sender.send_text(self.owner_number, text)
+            return "send_failed" if ok is False else "sent"
         if alert.status != "firing" or self.template is None:
             return "window_closed"
         # The template's {{1}} gets the summary only; Meta adds the approved text around it.
         summary = clean_line(text.split(": ", 1)[-1])
-        self.sender.send_template(self.owner_number, self.template, "he", (summary,))
-        return "template"
+        ok = self.sender.send_template(self.owner_number, self.template, "he", (summary,))
+        # Meta refuses a template that is not approved yet, or that it paused.
+        return "send_failed" if ok is False else "template"
 
     def _under_cap(self) -> bool:
         key = "alert-relay:sent-this-hour"

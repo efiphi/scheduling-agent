@@ -97,6 +97,9 @@ def configure(service: str, reader: MetricReader | None = None) -> MeterProvider
         metric_readers=readers,
     )
     otel_metrics.set_meter_provider(provider)
+    from shared import security  # here, not at the top: security imports this module
+
+    security.prime()
     return provider
 
 

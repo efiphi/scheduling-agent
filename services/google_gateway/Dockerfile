@@ -6,7 +6,7 @@
 # Same hardening as the api image. Base images are pinned by digest (T20).
 
 # ---- Stage 1: install dependencies with uv -----------------------------------------
-FROM python:3.13-slim@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962 AS build
+FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS build
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff /uv /bin/uv
 
@@ -35,12 +35,18 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --package google-gateway --no-editable
 
 # ---- Stage 2: runtime -------------------------------------------------------------
-FROM python:3.13-slim@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962
+FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
 
 # A dedicated unprivileged user with no login shell (T20, T21).
 # No pip at runtime: dependencies come from uv in the build stage, and pip's own vendored
 # libraries (urllib3, msgpack, ...) were the only HIGH findings in Trivy's first scan.
 RUN rm -rf /usr/local/lib/python3.13/site-packages/pip /usr/local/lib/python3.13/site-packages/pip-*.dist-info /usr/local/bin/pip*
+
+# Security fixes Debian published after this base image was built (Trivy, 17.11). Pinned, so a
+# rebuild installs the same thing. Remove when the base image includes them.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade zlib1g=1:1.3.dfsg+really1.3.1-1+deb13u1 \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app

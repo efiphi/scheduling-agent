@@ -1,0 +1,11 @@
+{
+  "_comment": "Known npm advisories that CI accepts for now, each with a reason and a date to look again. scripts/check-audit.mjs fails on any other high or critical advisory, and on an exception past its date (T20).",
+  "exceptions": [
+    {
+      "id": "GHSA-fc5q-39xc-vjpf",
+      "package": "picomatch",
+      "reason": "ReDoS in glob matching, used only by the build and test tools (vite, vitest), with our own patterns. Nothing of it ships to the browser, and no fixed release existed on 17.11.",
+      "until": "2026-12-15"
+    }
+  ]
+}

@@ -290,7 +290,10 @@ jobs:
 
       # `npm ci` installs exactly what package-lock.json says, nothing newer.
       - run: npm ci
-      - run: npm audit --audit-level=high
+      # High or critical advisories fail, except those accepted in audit-exceptions.json with a
+      # reason and a date to look again. npm audit exits non-zero on any finding, hence || true.
+      - name: npm audit
+        run: "{ npm audit --json || true; } | node scripts/check-audit.mjs"
       # The API types are generated from the api's OpenAPI schema (the Python job checks
       # that schema is current). Regenerate and fail if the committed types differ.
       - name: API types match the API

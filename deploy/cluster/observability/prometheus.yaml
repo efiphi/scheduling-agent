@@ -28,13 +28,15 @@ alertmanager:
   resources:
     requests: {cpu: 10m, memory: 32Mi}
     limits: {memory: 128Mi}
-  securityContext:
+  # The alertmanager subchart names these differently from the server's: podSecurityContext
+  # for the pod, securityContext for the container.
+  podSecurityContext:
     runAsNonRoot: true
     runAsUser: 65534
     runAsGroup: 65534
     fsGroup: 65534
     seccompProfile: {type: RuntimeDefault}
-  containerSecurityContext:
+  securityContext:
     allowPrivilegeEscalation: false
     readOnlyRootFilesystem: true
     capabilities: {drop: [ALL]}

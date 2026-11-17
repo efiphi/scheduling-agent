@@ -214,7 +214,7 @@ Each layer ends with something that works on its own.
 | 2 — Kubernetes and GitOps | k3d, Helm, Argo CD, network policies | ✅ Done |
 | 3 — Observability | OpenTelemetry, Prometheus, Grafana, agent tracing | ✅ Done |
 | 4 — Evals and red team | Hebrew/English eval set and the attack corpus against the real model, OWASP ZAP, a threat coverage table, all in CI | ✅ Done |
-| 5 — Detection | Detection rules as code, alerts | Planned |
+| 5 — Detection | Detection rules as code with unit tests, a watchdog for the monitoring stack, alerts to WhatsApp, main protected | ✅ Done |
 | 6 — Cloud | Terraform on AWS, temporary environment | Planned |
 
 ## Decisions

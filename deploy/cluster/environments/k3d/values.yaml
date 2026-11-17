@@ -4,7 +4,7 @@
 # every green build of main and Argo CD reads (ADR-021). These digests are from when the two
 # were split, and are left as they are on purpose.
 images:
-  api: ghcr.io/efiphi/scheduling-agent-api@sha256:1e3add2c8f3571da15c1549ded388ff355bf3034fda1ae347d09f2a0f87a3acf
-  gateway: ghcr.io/efiphi/scheduling-agent-gateway@sha256:d3704f483b1e24fca0d80e893660854b2623550aa9d58623c85f00adf19345e6
-  agent: ghcr.io/efiphi/scheduling-agent-agent@sha256:e434bb7a980634211e5711c68e5ff883fe8daf3502fc5334ed7341f8fdc97831
-  migrations: ghcr.io/efiphi/scheduling-agent-migrations@sha256:7ae2595f6edbf3624c11570ba4fffb53b3c98293953de287947dd165eb58eda2
+  api: ghcr.io/efiphi/scheduling-agent-api@sha256:5a853544310ce5bcda20d08703e05ecbe7e5f9f464244d129cc0d1f85ab5ac80
+  gateway: ghcr.io/efiphi/scheduling-agent-gateway@sha256:8a14dbe829919186fbc4aae4d496bf748a327a1b728ed2a6e9775a78bd710ee3
+  agent: ghcr.io/efiphi/scheduling-agent-agent@sha256:fa7273cdfce06448547ab9bbbb957cfef6121aafc10c1012b21b99ccdede8932
+  migrations: ghcr.io/efiphi/scheduling-agent-migrations@sha256:eac38cb68f355cf9f11eec16fb88e031b4293e38c7419613528a2e5ad9848697

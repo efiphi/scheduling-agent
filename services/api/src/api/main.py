@@ -34,7 +34,7 @@ from api.whatsapp import (
     parse_messages,
     valid_signature,
 )
-from shared import log, metrics, tracing
+from shared import log, metrics, security, tracing
 from shared.schema import StrictModel
 from shared.streams import APPROVED_ACTIONS, STREAM_MAX_LENGTH
 
@@ -417,7 +417,9 @@ def add_webhook_routes(app: FastAPI, d: Deps) -> None:
         wa = _whatsapp(d)
         body = await request.body()
         if not valid_signature(wa.app_secret, body, request.headers.get("x-hub-signature-256")):
-            # Not from Meta. Nothing in the body is read (T8).
+            # Not from Meta. Nothing in the body is read (T9). Counted, not stored: anyone can
+            # send these, and a row each would let them fill the database.
+            security.record("whatsapp_bad_signature")
             raise HTTPException(status_code=403, detail="bad signature")
         try:
             payload = json.loads(body)

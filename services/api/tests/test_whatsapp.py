@@ -392,3 +392,16 @@ def test_t27_the_agent_writes_only_to_a_registered_number(s: Setup) -> None:
     )
     assert notifier.notify(other_user, action_id) == "no_whatsapp"
     assert s.sender.sent == [] and s.sender.buttons == [] and s.sender.templates == []
+
+
+def test_t9_a_webhook_with_a_bad_signature_is_counted_not_stored(
+    s: Setup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    counted: list[str] = []
+    monkeypatch.setattr("shared.security.record", lambda kind, user_id=None: counted.append(kind))
+    response = webhook_client(s).post(
+        "/whatsapp/webhook", content=b"{}", headers={"x-hub-signature-256": "sha256=00"}
+    )
+    assert response.status_code == 403
+    assert counted == ["whatsapp_bad_signature"]
+    assert s.store.events == []

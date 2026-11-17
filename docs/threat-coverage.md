@@ -16,7 +16,7 @@ This table says what is checked. Whether it passes is reported by CI.
 | T6 | הזמנות יומן זדוניות |  | 2 |  |
 | T7 | הודעה מועברת עם הוראות |  | 2 |  |
 | T8 | התחזות למשתמש בווטסאפ | 2 |  |  |
-| T9 | זיוף webhook | 1 |  |  |
+| T9 | זיוף webhook | 2 |  |  |
 | T10 | זיוף או שימוש חוזר בכפתור אישור | 6 |  |  |
 | T11 | אובדן או גניבה של הטלפון | 4 |  |  |
 | T12 | הנדסה חברתית מול המשתמש |  |  | A person is the target, so code cannot prove the result. What code can do is covered under T5 and E2: new recipients are tagged and full addresses shown. |
@@ -29,7 +29,7 @@ This table says what is checked. Whether it passes is reported by CI.
 | T19 | Stored XSS באפליקציה הוובית | 4 |  |  |
 | T20 | שרשרת אספקה | 3 |  |  |
 | T21 | הגדרות Kubernetes חלשות | 5 |  |  |
-| T22 | דליפת מידע דרך לוגים ומעקב | 10 |  |  |
+| T22 | דליפת מידע דרך לוגים ומעקב | 11 |  |  |
 | T23 | חשיפה לספק מודל השפה | 1 |  |  |
 | T24 | הצפת מיילים (denial of wallet) | 7 |  |  |
 | T25 | לולאה בין סוכנים או מענים אוטומטיים | 3 |  |  |

@@ -64,6 +64,11 @@ LLM_COST = _meter.create_counter(
 )
 
 
+def create_counter(name: str, description: str) -> otel_metrics.Counter:
+    """A counter on the shared meter, for instruments defined next to the code that owns them."""
+    return _meter.create_counter(name, description=description)
+
+
 def configure(service: str, reader: MetricReader | None = None) -> MeterProvider:
     """Install the meter provider for this process. `reader` is for tests."""
     current = otel_metrics.get_meter_provider()

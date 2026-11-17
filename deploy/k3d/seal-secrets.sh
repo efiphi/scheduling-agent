@@ -52,7 +52,8 @@ make_secret postgres POSTGRES_PASSWORD OWNER_DB_PASSWORD API_DB_PASSWORD GATEWAY
 make_secret redis REDIS_PASSWORD
 make_secret api API_DB_PASSWORD REDIS_PASSWORD GOOGLE_LOGIN_CLIENT_ID GOOGLE_LOGIN_CLIENT_SECRET \
   WEB_APP_URL WHATSAPP_ACCESS_TOKEN WHATSAPP_PHONE_NUMBER_ID WHATSAPP_APP_SECRET \
-  WHATSAPP_VERIFY_TOKEN WHATSAPP_NOTIFY_TEMPLATE
+  WHATSAPP_VERIFY_TOKEN WHATSAPP_NOTIFY_TEMPLATE WHATSAPP_ALERT_TEMPLATE ALERT_RELAY_TOKEN \
+  ALERT_USER_ID
 make_secret gateway GATEWAY_DB_PASSWORD REDIS_PASSWORD GOOGLE_CONNECT_CLIENT_ID \
   GOOGLE_CONNECT_CLIENT_SECRET TOKEN_ENCRYPTION_KEYS
 make_secret agent REDIS_PASSWORD ANTHROPIC_API_KEY AGENT_DAILY_BUDGET_USD
@@ -67,6 +68,11 @@ print(f"MIGRATION_DATABASE_URL=postgresql+psycopg://scheduling_owner:{p}@postgre
 ' > "$workdir/migrations.env"
 printf 'OWNER_DB_PASSWORD=%s\n' "$(value OWNER_DB_PASSWORD)" >> "$workdir/migrations.env"
 seal migrations "$workdir/migrations.env"
+
+# The token Alertmanager sends to the alert relay (ADR-022). The relay reads it from the api
+# Secret above; Alertmanager reads this copy, in its own namespace, as a mounted file.
+printf 'token=%s\n' "$(value ALERT_RELAY_TOKEN)" > "$workdir/alert-relay-token.env"
+seal alert-relay-token "$workdir/alert-relay-token.env" observability deploy/cluster/observability/manifests
 
 # Grafana's admin login, in the observability namespace, with the key names its chart reads.
 printf 'admin-user=admin\nadmin-password=%s\n' "$(value GRAFANA_ADMIN_PASSWORD)" > "$workdir/grafana-admin.env"

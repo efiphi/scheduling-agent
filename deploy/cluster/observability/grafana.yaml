@@ -74,6 +74,8 @@ alerting:
         execErrState: Error
         annotations:
           summary: 'No successful gmail-poll run for over 10 minutes: new email is not reaching the agent.'
+          # The fixed text the owner's WhatsApp shows (alert relay, ADR-022).
+          summary_he: 'המיילים לא נקראים: הסריקה לא הצליחה כבר 10 דקות'
         data:
         - refId: A
           datasourceUid: prometheus
@@ -103,6 +105,8 @@ alerting:
         execErrState: Error
         annotations:
           summary: A pod restarted more than twice in 15 minutes (the agent once restarted 91 times unnoticed).
+          # The fixed text the owner's WhatsApp shows (alert relay, ADR-022).
+          summary_he: 'שירות מופעל מחדש שוב ושוב'
         data:
         - refId: A
           datasourceUid: prometheus
@@ -132,6 +136,8 @@ alerting:
         execErrState: Error
         annotations:
           summary: 'More than 20 messages waiting on a stream for 10 minutes: its consumer is stuck or down.'
+          # The fixed text the owner's WhatsApp shows (alert relay, ADR-022).
+          summary_he: 'תור נתקע ולא מתרוקן'
         data:
         - refId: A
           datasourceUid: prometheus
@@ -161,6 +167,8 @@ alerting:
         execErrState: Error
         annotations:
           summary: Over 80% of today's model budget is spent; at 100% the agent pauses until tomorrow.
+          # The fixed text the owner's WhatsApp shows (alert relay, ADR-022).
+          summary_he: 'ההוצאה על המודל קרובה לתקרה היומית'
         data:
         - refId: A
           datasourceUid: prometheus
@@ -190,6 +198,8 @@ alerting:
         execErrState: Error
         annotations:
           summary: An action you approved was not carried out; the agent asked you about it in the app.
+          # The fixed text the owner's WhatsApp shows (alert relay, ADR-022).
+          summary_he: 'פעולה שאישרת לא בוצעה'
         data:
         - refId: A
           datasourceUid: prometheus
@@ -219,6 +229,8 @@ alerting:
         execErrState: Error
         annotations:
           summary: More than 5 error lines in 10 minutes from one service.
+          # The fixed text the owner's WhatsApp shows (alert relay, ADR-022).
+          summary_he: 'שגיאות רבות בלוגים של שירות'
         data:
         - refId: A
           datasourceUid: loki
@@ -241,3 +253,21 @@ alerting:
                 type: gt
                 params:
                 - 5
+  # Every alert goes to Alertmanager, which sends it on to the owner's WhatsApp through the
+  # alert relay (ADR-022), the same path as the detection rules in Prometheus.
+  contactpoints.yaml:
+    apiVersion: 1
+    contactPoints:
+    - orgId: 1
+      name: alertmanager
+      receivers:
+      - uid: alertmanager
+        type: prometheus-alertmanager
+        settings:
+          url: http://prometheus-alertmanager.observability.svc.cluster.local:9093
+  policies.yaml:
+    apiVersion: 1
+    policies:
+    - orgId: 1
+      receiver: alertmanager
+      group_by: [alertname]

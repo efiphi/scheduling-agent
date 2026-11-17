@@ -115,7 +115,9 @@ class WhatsAppSender(Protocol):
         """Up to three reply buttons as (id, title)."""
         ...
 
-    def send_template(self, to: str, name: str, language: str) -> None: ...
+    def send_template(
+        self, to: str, name: str, language: str, params: tuple[str, ...] = ()
+    ) -> None: ...
 
 
 class MetaSender:
@@ -144,14 +146,16 @@ class MetaSender:
             }
         )
 
-    def send_template(self, to: str, name: str, language: str) -> None:
-        self._post(
-            {
-                "to": to,
-                "type": "template",
-                "template": {"name": name, "language": {"code": language}},
-            }
-        )
+    def send_template(
+        self, to: str, name: str, language: str, params: tuple[str, ...] = ()
+    ) -> None:
+        template: dict[str, Any] = {"name": name, "language": {"code": language}}
+        if params:
+            # Values for the template's {{1}}, {{2}}...: Meta fills them into approved text.
+            template["components"] = [
+                {"type": "body", "parameters": [{"type": "text", "text": p} for p in params]}
+            ]
+        self._post({"to": to, "type": "template", "template": template})
 
     def _post(self, message: dict[str, Any]) -> None:
         response = httpx2.post(

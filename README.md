@@ -144,7 +144,7 @@ deploy/k3d/test-network-policies.sh   # attack-style check of the NetworkPolicie
 kubectl -n scheduling-agent get pods
 ```
 
-**GitOps (Argo CD):** after the cluster and its sealed secrets exist, Argo CD keeps it in sync with `main`. Every green CI run on `main` builds the images for amd64 and arm64, pushes them to GHCR, and commits their digests to `deploy/cluster/environments/k3d/values.yaml` (`.github/workflows/images.yml`); Argo CD deploys that commit. Nobody runs `helm` or `kubectl apply` after the first time:
+**GitOps (Argo CD):** after the cluster and its sealed secrets exist, Argo CD keeps it in sync with `main`. Every green CI run on `main` builds the images for amd64 and arm64, pushes them to GHCR, and commits their digests to the `deploy/k3d` branch (`.github/workflows/images.yml`); Argo CD takes the chart from `main` and the digests from that branch, and deploys. `main` itself is protected: nothing reaches it without green checks, the bot included ([ADR-021](docs/adr/021-environment-branch.md)). Nobody runs `helm` or `kubectl apply` after the first time:
 
 ```bash
 deploy/cluster/argocd/install.sh                 # Argo CD itself, checksum- and digest-pinned

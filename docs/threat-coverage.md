@@ -16,7 +16,7 @@ This table says what is checked. Whether it passes is reported by CI.
 | T6 | הזמנות יומן זדוניות |  | 2 |  |
 | T7 | הודעה מועברת עם הוראות |  | 2 |  |
 | T8 | התחזות למשתמש בווטסאפ | 3 |  |  |
-| T9 | זיוף webhook | 3 |  |  |
+| T9 | זיוף webhook | 5 |  |  |
 | T10 | זיוף או שימוש חוזר בכפתור אישור | 7 |  |  |
 | T11 | אובדן או גניבה של הטלפון | 5 |  |  |
 | T12 | הנדסה חברתית מול המשתמש |  |  | A person is the target, so code cannot prove the result. What code can do is covered under T5 and E2: new recipients are tagged and full addresses shown. |
@@ -31,14 +31,14 @@ This table says what is checked. Whether it passes is reported by CI.
 | T21 | הגדרות Kubernetes חלשות | 5 |  |  |
 | T22 | דליפת מידע דרך לוגים ומעקב | 11 |  |  |
 | T23 | חשיפה לספק מודל השפה | 1 |  |  |
-| T24 | הצפת מיילים (denial of wallet) | 8 |  |  |
+| T24 | הצפת מיילים (denial of wallet) | 9 |  |  |
 | T25 | לולאה בין סוכנים או מענים אוטומטיים | 3 |  |  |
 | T26 | הצפת היומן | 1 |  |  |
 | T27 | חסימת מספר הווטסאפ | 1 |  |  |
 | T28 | ניחוש קוד העצירה או האימות הנוסף | 4 |  |  |
 | T29 | הרעלת זיכרון אנשי הקשר והדפוסים | 1 |  |  |
 | T30 | הסוכן מזוהה כסוכן |  |  | Accepted on purpose: emails disclose that an agent sent them (invariant 10), and T1-T7 must hold anyway. There is nothing to test. |
-| T31 | תקציר מטעה בכרטיס האישור | 11 | 4 |  |
+| T31 | תקציר מטעה בכרטיס האישור | 12 | 4 |  |
 | E1 | דאבל בוקינג | 6 |  |  |
 | E2 | קביעה עם האדם הלא נכון | 1 |  |  |
 | E3 | אזור זמן ושעון קיץ | 2 |  |  |

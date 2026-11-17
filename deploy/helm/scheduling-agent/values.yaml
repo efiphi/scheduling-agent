@@ -46,6 +46,16 @@ workloads:
     internet: true
     command: [python, -m, api.notifier]
     resources: {cpu: 50m, memory: 192Mi}
+  alert-relay:
+    image: api
+    secret: api
+    internet: true
+    port: 8003
+    # Alerts to the owner's WhatsApp (ADR-022). Only Alertmanager may call it, never Traefik.
+    allowFrom: alertmanager
+    command: [uvicorn, api.alert_relay:create_alert_relay_app, --factory, --host, 0.0.0.0, --port, "8003", --no-server-header, --no-access-log]
+    health: /healthz
+    resources: {cpu: 50m, memory: 192Mi}
   google-gateway:
     image: gateway
     secret: gateway

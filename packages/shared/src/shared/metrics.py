@@ -46,6 +46,10 @@ ACTIONS_DECIDED = _meter.create_counter(
 ACTIONS_EXECUTED = _meter.create_counter(
     "sa.actions.executed", description="Executor outcomes for approved actions"
 )
+ALERTS_RELAYED = _meter.create_counter(
+    "sa.alerts.relayed",
+    description="Alerts from Alertmanager, by what the relay did with them (ADR-022)",
+)
 APPROVAL_WAIT = _meter.create_histogram(
     "sa.actions.approval_wait",
     unit="s",

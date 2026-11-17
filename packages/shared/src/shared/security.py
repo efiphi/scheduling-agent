@@ -53,6 +53,18 @@ UNLISTED = "unlisted"
 SECURITY_EVENTS = metrics.create_counter("sa.security.events", "Security events, by kind (ADR-022)")
 
 
+def prime() -> None:
+    """Start every kind's counter at zero, once per process (metrics.configure calls it).
+
+    Prometheus's increase() does not count a series' first sample. A counter created by the
+    first event would show up already at 1, or at 6 after a burst, and a rule like "5 forged
+    webhooks in 10 minutes" would see no increase at all. Found by firing a real attack at
+    the cluster (deploy/k3d/test-detections.sh); the rule tests start their series at 0.
+    """
+    for kind in (*KINDS, UNLISTED):
+        SECURITY_EVENTS.add(0, {"kind": kind})
+
+
 def record(kind: str, user_id: UUID | None = None) -> None:
     """Count and log one security event. Ids only, never content (T22)."""
     label = kind if kind in KINDS else UNLISTED

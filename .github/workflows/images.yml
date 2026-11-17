@@ -101,13 +101,14 @@ jobs:
     name: Point k3d at the new images
     needs: publish
     runs-on: ubuntu-24.04
-    # The only job that can write to the repository, and it changes one file.
+    # The only job that can write to the repository. It writes one file, on deploy/k3d: main
+    # is protected and takes changes only through reviewed, green pull requests (ADR-021).
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
+          ref: deploy/k3d
 
       - name: Update the environment's image digests
         env:
@@ -129,5 +130,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -am "Deploy ${SHA::7} to k3d"
           # Pushes made with GITHUB_TOKEN do not start new workflow runs, so this cannot loop.
-          git pull --rebase origin main
-          git push origin HEAD:main
+          git pull --rebase origin deploy/k3d
+          git push origin HEAD:deploy/k3d

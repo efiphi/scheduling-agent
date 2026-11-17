@@ -1,9 +1,8 @@
-# The k3d environment: which image each component runs. Argo CD deploys the chart with
-# these values (deploy/cluster/argocd/apps/scheduling-agent.yaml).
+# The shape of the k3d environment's values, for CI to lint and render the chart with.
 #
-# CI rewrites the four lines below after every green build of main (images.yml): each
-# image by digest, so what runs is exactly what CI built and tested (T20). Do not edit
-# them by hand; to roll back, revert the commit that changed them.
+# Not what runs: the live image digests are on the deploy/k3d branch, which CI rewrites after
+# every green build of main and Argo CD reads (ADR-021). These digests are from when the two
+# were split, and are left as they are on purpose.
 images:
   api: ghcr.io/efiphi/scheduling-agent-api@sha256:1e3add2c8f3571da15c1549ded388ff355bf3034fda1ae347d09f2a0f87a3acf
   gateway: ghcr.io/efiphi/scheduling-agent-gateway@sha256:d3704f483b1e24fca0d80e893660854b2623550aa9d58623c85f00adf19345e6

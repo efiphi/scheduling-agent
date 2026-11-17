@@ -146,6 +146,10 @@ ALLOWED_KEYS = {
         "WHATSAPP_APP_SECRET",
         "WHATSAPP_VERIFY_TOKEN",
         "WHATSAPP_NOTIFY_TEMPLATE",
+        # The alert relay runs from the api image with the api Secret (ADR-022).
+        "WHATSAPP_ALERT_TEMPLATE",
+        "ALERT_RELAY_TOKEN",
+        "ALERT_USER_ID",
     },
     "gateway": {
         "GATEWAY_DB_PASSWORD",

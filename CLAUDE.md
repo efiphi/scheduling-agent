@@ -69,7 +69,8 @@ Work strictly in the layers defined in `docs/03-architecture.md`. Do not jump ah
 - **Layer 2 — Kubernetes + GitOps:** k3d, Helm chart, Sealed Secrets, NetworkPolicies, Argo CD + GHCR, CronJobs, CI gates. *(done, 31.10)*
 - **Layer 3 — observability:** live demo on the cluster, OpenTelemetry traces (one per email), agent run tracing, JSON logs, metrics, Grafana dashboards and alerts as code (ADR-018). *(done, 1.11)*
 - **Layer 4 — evals + red team in CI:** real-model evals and attacks with three repeats, OWASP ZAP passive scan, generated threat coverage table (ADR-020). *(done, 3.11)*
-- **Layers 5–6:** detection layer, temporary cloud.
+- **Layer 5 — detection:** image digests on their own branch so main is protected (ADR-021); security events as metrics; detection rules as code with promtool tests; a watchdog for the monitoring stack; Alertmanager to WhatsApp through an alert-relay pod (ADR-022). *(done, 17.11)*
+- **Layer 6:** temporary cloud (also a stable webhook URL and Falco, deferred from Layer 5).
 
 ## Conventions
 
@@ -99,5 +100,7 @@ Also decided (26.10, start of Layer 1): LLM = Claude Haiku 5.5 with structured o
 Also decided (2.11): the approval card shows the incoming email's sender, subject, and a model summary that is never cut; the summary is display only (ADR-019, T31).
 
 Also decided (3.11): attacks and safety cases must pass every repeat, quality stays at 90%, verdicts come from code and not from another model; promptfoo and garak rejected for now (ADR-020).
+
+Also decided (17.11, Layer 5): digests on a deploy/k3d branch that Argo CD deploys; alerts go to WhatsApp (not Telegram); detections read a counter per security-event kind, not the database; Falco and a stable URL wait for Layer 6 (ADR-021, ADR-022).
 
 Still open: whether to add a separate "reader" LLM in addition to key separation (to discuss with the security mentor).

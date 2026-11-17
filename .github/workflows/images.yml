@@ -109,6 +109,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: deploy/k3d
+          fetch-depth: 0 # to merge main's tested commit into it
+
+      # The environment is main as tested plus the digests: bring in the commit CI just built.
+      # A conflict can only be in the values file, which the next step rewrites anyway.
+      - name: Merge the tested commit of main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git merge --no-edit -X ours "$SHA"
 
       - name: Update the environment's image digests
         env:
@@ -125,10 +134,8 @@ jobs:
             -e "s|^(  migrations: ).*|\1${MIGRATIONS}|" \
             "$file"
           git diff --stat
-          if git diff --quiet; then echo "no change"; exit 0; fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "Deploy ${SHA::7} to k3d"
+          if ! git diff --quiet; then git commit -am "Deploy ${SHA::7} to k3d"; fi
           # Pushes made with GITHUB_TOKEN do not start new workflow runs, so this cannot loop.
-          git pull --rebase origin deploy/k3d
+          # A plain push: it fails rather than rewrite history if the branch moved meanwhile
+          # (a rebase would replay main's commits one by one and conflict on this file).
           git push origin HEAD:deploy/k3d

@@ -82,3 +82,17 @@ spec:
     - from:
         - podSelector: {matchLabels: {app.kubernetes.io/name: prometheus, app.kubernetes.io/component: server}}
       ports: [{protocol: TCP, port: 8080}]
+---
+# Alertmanager takes alerts from Prometheus and Grafana only (ADR-022). Its own calls out,
+# to the alert relay, are allowed in by the relay's policy in the scheduling-agent chart.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: alertmanager, namespace: observability}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: alertmanager}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: prometheus, app.kubernetes.io/component: server}}
+        - podSelector: {matchLabels: {app.kubernetes.io/name: grafana}}
+      ports: [{protocol: TCP, port: 9093}]

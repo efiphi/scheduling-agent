@@ -19,7 +19,52 @@ server:
     allowPrivilegeEscalation: false
     readOnlyRootFilesystem: true
     capabilities: {drop: [ALL]}
-alertmanager: {enabled: false}   # alerts are Grafana's (step 3.6)
+# Alertmanager: receives every alert, from these rules and from Grafana, groups them and sends
+# them to the alert relay, which writes to the owner's WhatsApp (ADR-022). The relay checks a
+# bearer token, mounted here from the alert-relay-token Secret.
+alertmanager:
+  enabled: true
+  persistence: {enabled: false}  # silences are lost on restart; fine for one owner
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 128Mi}
+  # The alertmanager subchart names these differently from the server's: podSecurityContext
+  # for the pod, securityContext for the container.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
+    seccompProfile: {type: RuntimeDefault}
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: {drop: [ALL]}
+  extraSecretMounts:
+    - name: relay-token
+      mountPath: /etc/alertmanager/relay
+      secretName: alert-relay-token
+      readOnly: true
+  config:
+    global: {resolve_timeout: 5m}
+    route:
+      receiver: whatsapp
+      group_by: [alertname]
+      group_wait: 30s
+      group_interval: 5m
+      # A still-firing alert is repeated twice a day, not every few minutes: each message
+      # outside WhatsApp's 24-hour window costs money (T24).
+      repeat_interval: 12h
+    receivers:
+      - name: whatsapp
+        webhook_configs:
+          - url: http://alert-relay.scheduling-agent.svc.cluster.local:8003/alerts
+            send_resolved: true
+            max_alerts: 20
+            http_config:
+              authorization:
+                type: Bearer
+                credentials_file: /etc/alertmanager/relay/token
 prometheus-node-exporter: {enabled: false}  # the "node" is a container in k3d
 prometheus-pushgateway: {enabled: false}
 kube-state-metrics:

@@ -55,7 +55,10 @@ spec:
       targetRevision: 29.37.0
       helm:
         releaseName: prometheus
-        valueFiles: [$values/deploy/cluster/observability/prometheus.yaml]
+        valueFiles:
+          - $values/deploy/cluster/observability/prometheus.yaml
+          # Detection and watchdog rules, generated from detections/rules.yml (ADR-022).
+          - $values/deploy/cluster/observability/detections/prometheus-rules.yaml
     - repoURL: https://github.com/efiphi/scheduling-agent.git
       targetRevision: main
       ref: values

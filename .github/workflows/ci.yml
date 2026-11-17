@@ -221,6 +221,14 @@ jobs:
       - name: Chart tests
         run: uv run pytest tests/test_helm.py -v
 
+      # The detection rules (ADR-022): valid, and each one fires, or stays quiet, exactly as its
+      # unit tests in rules_test.yml say.
+      - name: Detection rules pass their unit tests (promtool)
+        working-directory: deploy/cluster/observability/detections
+        run: |
+          promtool check rules rules.yml
+          promtool test rules rules_test.yml
+
       # Every PromQL query in the dashboards and alert rules, syntax-checked (step 3.7).
       - name: Dashboard and alert queries parse (promtool)
         run: |

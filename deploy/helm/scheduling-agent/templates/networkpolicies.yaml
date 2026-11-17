@@ -168,12 +168,22 @@ spec:
     matchLabels: {app.kubernetes.io/name: {{ $name }}}
   policyTypes: [Ingress]
   ingress:
+    {{- if eq ($w.allowFrom | default "") "alertmanager" }}
+    # Only Alertmanager, in the monitoring namespace: the alert relay is not on the network
+    # anyone else can reach (ADR-022).
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: observability}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: alertmanager}
+    {{- else }}
     # Only the cluster's ingress controller (Traefik, part of k3s). No pod calls another's API.
     - from:
         - namespaceSelector:
             matchLabels: {kubernetes.io/metadata.name: kube-system}
           podSelector:
             matchLabels: {app.kubernetes.io/name: traefik}
+    {{- end }}
       ports:
         - {protocol: TCP, port: {{ $w.port }}}
 {{- end }}

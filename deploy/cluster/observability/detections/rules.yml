@@ -1,0 +1,124 @@
+# Detection rules as code (Layer 5, ADR-022). Prometheus evaluates them every minute and
+# Alertmanager sends what fires to the owner's WhatsApp.
+#
+# Each security rule reads sa_security_events_total{kind}: one counter per kind of security
+# event, written by the services next to the database row (shared/security.py). The watchdog
+# rules watch the monitoring stack itself, since Grafana cannot report its own outage.
+#
+# Every rule has a unit test in rules_test.yml (promtool test rules, in CI), named after the
+# threat it detects. Labels: severity (critical wakes you up, warning can wait) and threat.
+# summary_he is the fixed Hebrew text the WhatsApp message shows: no values from events.
+#
+# After a change: python3 deploy/cluster/observability/detections/render.py
+groups:
+  - name: security
+    rules:
+      - alert: CrossTenantAttempt
+        # A plan or a calendar question for a task issued to another user: a manipulated
+        # agent, or a bug in tenant isolation. Never normal, so one is enough.
+        expr: sum(increase(sa_security_events_total{kind=~"plan_task_mismatch|free_busy_task_mismatch"}[10m])) > 0
+        labels: {severity: critical, threat: T13}
+        annotations:
+          summary_he: "ניסיון גישה לנתונים של משתמש אחר"
+
+      - alert: StopCodeGuessing
+        expr: sum(increase(sa_security_events_total{kind="stop_code_failed"}[1h])) >= 3
+        labels: {severity: critical, threat: T28}
+        annotations:
+          summary_he: "ניסיונות חוזרים לנחש את קוד העצירה"
+
+      - alert: AgentStoppedByCode
+        # Usually the owner, on purpose. If it was not, the backup phone may be compromised.
+        expr: sum(increase(sa_security_events_total{kind="agent_stopped_by_code"}[10m])) > 0
+        labels: {severity: warning, threat: T11}
+        annotations:
+          summary_he: "הסוכן הושהה בקוד העצירה"
+
+      - alert: ForgedApproval
+        # A button we never sent, or an execution with no valid approval for this content.
+        expr: sum(increase(sa_security_events_total{kind=~"whatsapp_unknown_button|execute_refused_no_valid_approval|execute_refused_hash_mismatch"}[1h])) > 0
+        labels: {severity: critical, threat: T10}
+        annotations:
+          summary_he: "ניסיון לבצע פעולה בלי אישור תקף"
+
+      - alert: WebhookForgery
+        # Requests that claim to be Meta's but are not signed by it. A few can be noise from
+        # scanners on the public tunnel; a burst is someone trying.
+        expr: sum(increase(sa_security_events_total{kind="whatsapp_bad_signature"}[10m])) >= 5
+        labels: {severity: warning, threat: T9}
+        annotations:
+          summary_he: "בקשות מזויפות לכתובת של ווטסאפ"
+
+      - alert: UnknownSenders
+        expr: sum(increase(sa_security_events_total{kind="whatsapp_unknown_sender"}[1h])) >= 5
+        labels: {severity: warning, threat: T8}
+        annotations:
+          summary_he: "הודעות רבות ממספרים לא מוכרים"
+
+      - alert: OAuthTampering
+        expr: sum(increase(sa_security_events_total{kind=~"oauth_invalid_state|google_account_mismatch"}[1h])) >= 3
+        labels: {severity: warning, threat: T16}
+        annotations:
+          summary_he: "ניסיונות חוזרים לשבש את החיבור ל-Google"
+
+      - alert: GuardRejectionsSpike
+        # The policy guard refusing the agent's plans: injected emails trying to add recipients
+        # or content (T1-T5). One can be a model slip; several in an hour is a pattern.
+        expr: sum(increase(sa_security_events_total{kind=~"policy_guard_rejected|confirm_slot_not_offered|execute_refused_recipient_not_in_thread|execute_unknown_action"}[1h])) >= 3
+        labels: {severity: warning, threat: T5}
+        annotations:
+          summary_he: "שומר המדיניות דחה כמה תוכניות של הסוכן"
+
+      - alert: EmailFlood
+        expr: sum(increase(sa_security_events_total{kind="email_rate_limited"}[1h])) >= 10
+        labels: {severity: warning, threat: T24}
+        annotations:
+          summary_he: "הצפת מיילים לסוכן"
+
+      - alert: GoogleTokenRejected
+        # Revoked, or the 7-day limit of Google's testing mode: email stops being read.
+        expr: sum(increase(sa_security_events_total{kind="google_token_rejected"}[1h])) > 0
+        labels: {severity: warning, threat: E13}
+        annotations:
+          summary_he: "החיבור ל-Google פג, צריך לחבר מחדש"
+
+      - alert: UnlistedSecurityEvent
+        # The code wrote a kind that is not in shared/security.py: a bug, and an event no rule sees.
+        expr: sum(increase(sa_security_events_total{kind="unlisted"}[1h])) > 0
+        labels: {severity: warning, threat: E13}
+        annotations:
+          summary_he: "אירוע אבטחה מסוג לא מוכר"
+
+  - name: watchdog
+    rules:
+      - alert: MonitoringComponentDown
+        # Grafana evaluates the operational alerts and Alloy carries every service's metrics
+        # and logs. If either is down, other alerts go quiet with it (E13).
+        expr: max by (deployment) (kube_deployment_status_replicas_available{namespace="observability", deployment=~"grafana|alloy"}) < 1
+        for: 5m
+        labels: {severity: critical, threat: E13}
+        annotations:
+          summary_he: "רכיב ניטור לא פעיל"
+
+      - alert: LogStoreDown
+        expr: max by (statefulset) (kube_statefulset_status_replicas_ready{namespace="observability", statefulset="loki"}) < 1
+        for: 5m
+        labels: {severity: warning, threat: E13}
+        annotations:
+          summary_he: "מאגר הלוגים לא פעיל"
+
+      - alert: MonitoringPodRestarting
+        # The application namespace has its own rule in Grafana; this one covers the
+        # monitoring namespace, which Grafana cannot be trusted to watch.
+        expr: max by (pod) (increase(kube_pod_container_status_restarts_total{namespace="observability"}[1h])) >= 3
+        labels: {severity: warning, threat: E13}
+        annotations:
+          summary_he: "רכיב ניטור מופעל מחדש שוב ושוב"
+
+      - alert: ServiceMetricsMissing
+        # Every worker reports its queue backlog every 15 seconds. Silence means the services or
+        # the pipeline that carries their metrics stopped.
+        expr: absent_over_time(sa_queue_backlog[15m])
+        labels: {severity: warning, threat: E13}
+        annotations:
+          summary_he: "השירותים הפסיקו לשלוח מדדים"

@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from redis import Redis
+from sqlalchemy import Engine
 
 from api.config import ApiConfig
 from api.google_login import GoogleIdentityLogin
@@ -14,17 +15,27 @@ from db.engine import make_engine
 from shared.streams import APPROVED_ACTIONS, REDIS_SOCKET_TIMEOUT_SECONDS, STREAM_MAX_LENGTH
 
 
-def deps_from_env() -> Deps:
-    config = ApiConfig.from_env()
-    redis = Redis(
+def api_redis(config: ApiConfig | None = None) -> Redis:
+    config = config or ApiConfig.from_env()
+    return Redis(
         host=config.redis_host,
         port=config.redis_port,
         password=config.redis_password.get_secret_value(),
         socket_timeout=REDIS_SOCKET_TIMEOUT_SECONDS,
     )
-    engine = make_engine(
+
+
+def api_engine(config: ApiConfig | None = None) -> Engine:
+    config = config or ApiConfig.from_env()
+    return make_engine(
         "api_service", config.db_password.get_secret_value(), config.db_host, config.db_port
     )
+
+
+def deps_from_env() -> Deps:
+    config = ApiConfig.from_env()
+    redis = api_redis(config)
+    engine = api_engine(config)
     store = SqlApiStore(engine)
     whatsapp = None
     notifier = None

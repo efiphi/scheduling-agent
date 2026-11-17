@@ -212,3 +212,21 @@ class FakeRedis:
     def xadd(self, name: str, fields: dict[str, str], **_: Any) -> str:
         self.streams.setdefault(name, []).append(fields)
         return "0-1"
+
+    counters: dict[str, int] = field(default_factory=dict)
+    queued: list[Any] = field(default_factory=list)
+
+    # Counters and a pipeline, for the alert relay's hourly cap. Expiry is not modelled.
+    def pipeline(self) -> "FakeRedis":
+        return self
+
+    def incr(self, name: str) -> None:
+        self.counters[name] = self.counters.get(name, 0) + 1
+        self.queued.append(self.counters[name])
+
+    def expire(self, name: str, seconds: int, **_: Any) -> None:
+        self.queued.append(True)
+
+    def execute(self) -> list[Any]:
+        results, self.queued = self.queued, []
+        return results

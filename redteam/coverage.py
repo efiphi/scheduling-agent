@@ -21,8 +21,8 @@ ATTACKS = Path(__file__).with_name("attacks.json")
 REASONS = Path(__file__).with_name("coverage_reasons.json")
 TABLE = ROOT / "docs" / "threat-coverage.md"
 
-TEST_ROOTS = ("services", "packages", "tests", "web/src")
-TEST_SUFFIXES = {".py", ".ts", ".tsx"}
+TEST_ROOTS = ("services", "packages", "tests", "web/src", "deploy/cluster/observability/detections")
+TEST_SUFFIXES = {".py", ".ts", ".tsx", ".yml"}
 # Not real test names: this file and its own test talk about the naming rule.
 EXCLUDED = {"coverage.py", "test_threat_coverage.py"}
 

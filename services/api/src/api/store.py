@@ -23,7 +23,7 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError
 
 from db.session import set_user_context
-from shared import metrics
+from shared import metrics, security
 
 
 class ApproveResult(StrEnum):
@@ -375,3 +375,4 @@ class SqlApiStore:
                 ),
                 {"u": user_id, "k": kind, "d": json.dumps(details)},
             )
+        security.record(kind, user_id)  # a signal for detection rules (ADR-022)

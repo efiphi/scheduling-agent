@@ -94,6 +94,7 @@ def test_t13_t17_each_component_reads_only_its_own_secret(objects: list[dict[str
         "api": {"api"},
         "whatsapp-webhook": {"api"},
         "notifier": {"api"},
+        "alert-relay": {"api"},
         "google-gateway": {"gateway"},
         "gmail-poll": {"gateway"},
         "calendar-responder": {"gateway"},
@@ -145,6 +146,10 @@ ALLOWED_KEYS = {
         "WHATSAPP_APP_SECRET",
         "WHATSAPP_VERIFY_TOKEN",
         "WHATSAPP_NOTIFY_TEMPLATE",
+        # The alert relay runs from the api image with the api Secret (ADR-022).
+        "WHATSAPP_ALERT_TEMPLATE",
+        "ALERT_RELAY_TOKEN",
+        "ALERT_USER_ID",
     },
     "gateway": {
         "GATEWAY_DB_PASSWORD",
@@ -214,6 +219,7 @@ def test_adr_011_the_agent_is_not_labeled_for_the_database(objects: list[dict[st
         "api",
         "whatsapp-webhook",
         "notifier",
+        "alert-relay",
         "google-gateway",
         "gmail-poll",
         "calendar-responder",
@@ -249,7 +255,12 @@ def test_t21_internet_egress_excludes_private_ranges_and_cloud_metadata(
 
 @needs_helm
 def test_http_services_accept_only_the_ingress_controller(objects: list[dict[str, Any]]) -> None:
-    ingress = [o for o in objects if o["metadata"]["name"].startswith("ingress-")]
+    ingress = [
+        o
+        for o in objects
+        if o["metadata"]["name"].startswith("ingress-")
+        and o["metadata"]["name"] != "ingress-alert-relay"
+    ]
     assert {o["metadata"]["name"] for o in ingress} == {
         "ingress-api",
         "ingress-google-gateway",
@@ -425,3 +436,18 @@ def test_alert_rules_are_unique_explained_and_watch_for_silence() -> None:
     assert all(rule["annotations"]["summary"] for rule in rules.values())
     # E13: if polling stops reporting at all, that is the failure itself, not "no data".
     assert rules["sa-poll-stale"]["noDataState"] == "Alerting"
+
+
+@needs_helm
+def test_t9_only_alertmanager_can_reach_the_alert_relay(objects: list[dict[str, Any]]) -> None:
+    # The relay can write to the owner's WhatsApp, so nothing else may call it (ADR-022).
+    [policy] = [o for o in objects if o["metadata"]["name"] == "ingress-alert-relay"]
+    [rule] = policy["spec"]["ingress"]
+    assert rule["from"] == [
+        {
+            "namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "observability"}},
+            "podSelector": {"matchLabels": {"app.kubernetes.io/name": "alertmanager"}},
+        }
+    ]
+    assert rule["ports"] == [{"protocol": "TCP", "port": 8003}]
+    assert not any(o["kind"] == "Ingress" and "alert-relay" in str(o["spec"]) for o in objects)

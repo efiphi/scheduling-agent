@@ -1,0 +1,219 @@
+# Unit tests for rules.yml: promtool test rules rules_test.yml (CI, ADR-022).
+# Each test feeds a synthetic series and says which alerts must fire, or that none may.
+# Test names follow the threat they cover, so docs/threat-coverage.md counts them.
+rule_files: [rules.yml]
+evaluation_interval: 1m
+
+tests:
+  - name: test_t13_one_cross_tenant_attempt_alerts_at_once
+    interval: 1m
+    input_series:
+      - series: 'sa_security_events_total{kind="plan_task_mismatch", job="scheduling-agent/plan-handler"}'
+        values: '0 0 1 1 1'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: CrossTenantAttempt
+        exp_alerts:
+          - exp_labels: {severity: critical, threat: T13}
+            exp_annotations: {summary_he: "ניסיון גישה לנתונים של משתמש אחר"}
+
+  - name: test_t28_three_wrong_stop_codes_alert_and_two_do_not
+    interval: 1m
+    input_series:
+      - series: 'sa_security_events_total{kind="stop_code_failed", job="scheduling-agent/api"}'
+        values: '0 1 2 2 2 3 3'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: StopCodeGuessing
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: StopCodeGuessing
+        exp_alerts:
+          - exp_labels: {severity: critical, threat: T28}
+            exp_annotations: {summary_he: "ניסיונות חוזרים לנחש את קוד העצירה"}
+
+  - name: test_t11_a_stop_by_code_is_reported
+    interval: 1m
+    input_series:
+      - series: 'sa_security_events_total{kind="agent_stopped_by_code", job="scheduling-agent/api"}'
+        values: '0 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: AgentStoppedByCode
+        exp_alerts:
+          - exp_labels: {severity: warning, threat: T11}
+            exp_annotations: {summary_he: "הסוכן הושהה בקוד העצירה"}
+
+  - name: test_t10_any_forged_approval_alerts
+    interval: 1m
+    input_series:
+      - series: 'sa_security_events_total{kind="execute_refused_hash_mismatch", job="scheduling-agent/action-executor"}'
+        values: '0 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ForgedApproval
+        exp_alerts:
+          - exp_labels: {severity: critical, threat: T10}
+            exp_annotations: {summary_he: "ניסיון לבצע פעולה בלי אישור תקף"}
+
+  - name: test_t9_a_burst_of_unsigned_webhooks_alerts_and_a_few_do_not
+    interval: 1m
+    input_series:
+      - series: 'sa_security_events_total{kind="whatsapp_bad_signature", job="scheduling-agent/api"}'
+        values: '0 2 2 2 8 8'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: WebhookForgery
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: WebhookForgery
+        exp_alerts:
+          - exp_labels: {severity: warning, threat: T9}
+            exp_annotations: {summary_he: "בקשות מזויפות לכתובת של ווטסאפ"}
+
+  - name: test_t8_many_unknown_senders_alert
+    interval: 1m
+    input_series:
+      - series: 'sa_security_events_total{kind="whatsapp_unknown_sender", job="scheduling-agent/api"}'
+        values: '0 2 4 6'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: UnknownSenders
+        exp_alerts:
+          - exp_labels: {severity: warning, threat: T8}
+            exp_annotations: {summary_he: "הודעות רבות ממספרים לא מוכרים"}
+
+  - name: test_t16_repeated_oauth_tampering_alerts
+    interval: 1m
+    input_series:
+      - series: 'sa_security_events_total{kind="oauth_invalid_state", job="scheduling-agent/google-gateway"}'
+        values: '0 1 2'
+      - series: 'sa_security_events_total{kind="google_account_mismatch", job="scheduling-agent/google-gateway"}'
+        values: '0 0 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: OAuthTampering
+        exp_alerts:
+          - exp_labels: {severity: warning, threat: T16}
+            exp_annotations: {summary_he: "ניסיונות חוזרים לשבש את החיבור ל-Google"}
+
+  - name: test_t5_guard_rejections_across_kinds_add_up
+    interval: 1m
+    input_series:
+      - series: 'sa_security_events_total{kind="policy_guard_rejected", job="scheduling-agent/plan-handler"}'
+        values: '0 1 2'
+      - series: 'sa_security_events_total{kind="execute_refused_recipient_not_in_thread", job="scheduling-agent/action-executor"}'
+        values: '0 0 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: GuardRejectionsSpike
+        exp_alerts:
+          - exp_labels: {severity: warning, threat: T5}
+            exp_annotations: {summary_he: "שומר המדיניות דחה כמה תוכניות של הסוכן"}
+
+  - name: test_t24_an_email_flood_alerts
+    interval: 1m
+    input_series:
+      - series: 'sa_security_events_total{kind="email_rate_limited", job="scheduling-agent/gmail-poll"}'
+        values: '0 5 12'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: EmailFlood
+        exp_alerts:
+          - exp_labels: {severity: warning, threat: T24}
+            exp_annotations: {summary_he: "הצפת מיילים לסוכן"}
+
+  - name: test_e13_a_rejected_google_token_alerts
+    interval: 1m
+    input_series:
+      - series: 'sa_security_events_total{kind="google_token_rejected", job="scheduling-agent/gmail-poll"}'
+        values: '0 1'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: GoogleTokenRejected
+        exp_alerts:
+          - exp_labels: {severity: warning, threat: E13}
+            exp_annotations: {summary_he: "החיבור ל-Google פג, צריך לחבר מחדש"}
+
+  - name: test_e13_an_unlisted_kind_alerts
+    interval: 1m
+    input_series:
+      - series: 'sa_security_events_total{kind="unlisted", job="scheduling-agent/api"}'
+        values: '0 1'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: UnlistedSecurityEvent
+        exp_alerts:
+          - exp_labels: {severity: warning, threat: E13}
+            exp_annotations: {summary_he: "אירוע אבטחה מסוג לא מוכר"}
+
+  - name: test_quiet_counters_raise_no_security_alert
+    interval: 1m
+    input_series:
+      - series: 'sa_security_events_total{kind="stop_code_failed", job="scheduling-agent/api"}'
+        values: '4 4 4 4 4 4'
+      - series: 'sa_security_events_total{kind="plan_task_mismatch", job="scheduling-agent/plan-handler"}'
+        values: '1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: StopCodeGuessing
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: CrossTenantAttempt
+        exp_alerts: []
+
+  - name: test_e13_grafana_down_for_five_minutes_alerts
+    interval: 1m
+    input_series:
+      - series: 'kube_deployment_status_replicas_available{namespace="observability", deployment="grafana"}'
+        values: '1 0 0 0 0 0 0 0'
+      - series: 'kube_deployment_status_replicas_available{namespace="observability", deployment="alloy"}'
+        values: '1 1 1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: MonitoringComponentDown
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: MonitoringComponentDown
+        exp_alerts:
+          - exp_labels: {severity: critical, threat: E13, deployment: grafana}
+            exp_annotations: {summary_he: "רכיב ניטור לא פעיל"}
+
+  - name: test_e13_loki_down_alerts
+    interval: 1m
+    input_series:
+      - series: 'kube_statefulset_status_replicas_ready{namespace="observability", statefulset="loki"}'
+        values: '0 0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: LogStoreDown
+        exp_alerts:
+          - exp_labels: {severity: warning, threat: E13, statefulset: loki}
+            exp_annotations: {summary_he: "מאגר הלוגים לא פעיל"}
+
+  - name: test_e13_a_monitoring_pod_restarting_alerts
+    interval: 1m
+    input_series:
+      - series: 'kube_pod_container_status_restarts_total{namespace="observability", pod="grafana-abc", container="grafana"}'
+        values: '0 1 2 3'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: MonitoringPodRestarting
+        exp_alerts:
+          - exp_labels: {severity: warning, threat: E13, pod: grafana-abc}
+            exp_annotations: {summary_he: "רכיב ניטור מופעל מחדש שוב ושוב"}
+
+  - name: test_e13_silent_services_alert_and_reporting_ones_do_not
+    interval: 1m
+    input_series:
+      - series: 'sa_queue_backlog{stream="agent:email-tasks", job="scheduling-agent/agent"}'
+        values: '0x10 _x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ServiceMetricsMissing
+        exp_alerts: []
+      - eval_time: 28m
+        alertname: ServiceMetricsMissing
+        exp_alerts:
+          - exp_labels: {severity: warning, threat: E13}
+            exp_annotations: {summary_he: "השירותים הפסיקו לשלוח מדדים"}

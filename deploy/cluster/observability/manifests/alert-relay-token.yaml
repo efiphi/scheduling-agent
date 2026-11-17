@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: alert-relay-token
+  namespace: observability
+spec:
+  encryptedData:
+    token: AgBwLkKV+j3eQCm2xd2czPY9c6xQ1sjlA3b2WYzcMNLWmcbQuygKpxY89H1e8tmXLl41EexlwUOymRD94FfK98nRYAFfwzbyjWlvEHDwFMsOxvJWkCoG3pVcO8Z4IjnEbmduEtSYq46jv1wFYLnwZqDq2c2d5YN913JyyswCzDJubvB+5ssUtE4C0lsZaxG2PzLTT8a0Aa+k6hGOmoArfzKPU53oAFnD1sp613imK3mdLcZUS2cIpp9UQrWSe/knhmEOq1CZnaThMdWuftUG/B3+b/6BTVb76eQQqW66jZ2L9+9+pYFOHjnlpDXoHByv50wF2AjnFRg2nvv///2E2nYPqXbQPn01rGHJ78FgXd1tbsBTUD1uvwvraJS9ak2dyXQSVrZgm4aZdwTCo7Xwp3e4zIUO0uBHothio0PO2m5PPT0EQFnoUWuFaC6Sx83Y1vJRGF8v5nBTgJk99r0j9Sx1Dkay5KhMPC2XmrvowjR3PyeDoEikO+HMYm8g/9Wqbtk94Hq/qShpGF3Te3vYjlGS61ItxJWJs/jnzEabseYIP7R4gDPfQ3ndF9IIwU4HIERt6ZVm2xjeMED4it44sQ7eR4RYpsc47HV0EduWSrlnn4ZGSh+AovzdDDdMI6TqpA8h4oV48cTykflKnzdqOXnihihO2bgF2Fy1uWvlqCW0n4k6zYkl/cZc7rIL8Drsa/Fgy39q3j4tysfooaWV106Z5Kc0SFj7+z0CFNpaVd5Av4y+XxhwrXbMZ9Tp
+  template:
+    metadata:
+      name: alert-relay-token
+      namespace: observability

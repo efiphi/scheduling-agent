@@ -7,6 +7,8 @@ from sqlalchemy import Connection, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql.expression import bindparam
 
+from shared import security
+
 _AUDIT = text(
     "INSERT INTO app.audit_log (user_id, actor, action, details)"
     " VALUES (:user_id, 'gateway', :action, :details)"
@@ -25,3 +27,4 @@ def write_security_event(
     conn: Connection, user_id: UUID | None, kind: str, details: dict[str, Any]
 ) -> None:
     conn.execute(_SECURITY_EVENT, {"user_id": user_id, "kind": kind, "details": details})
+    security.record(kind, user_id)  # a signal for detection rules (ADR-022)

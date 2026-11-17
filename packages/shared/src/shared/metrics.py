@@ -46,6 +46,10 @@ ACTIONS_DECIDED = _meter.create_counter(
 ACTIONS_EXECUTED = _meter.create_counter(
     "sa.actions.executed", description="Executor outcomes for approved actions"
 )
+ALERTS_RELAYED = _meter.create_counter(
+    "sa.alerts.relayed",
+    description="Alerts from Alertmanager, by what the relay did with them (ADR-022)",
+)
 APPROVAL_WAIT = _meter.create_histogram(
     "sa.actions.approval_wait",
     unit="s",
@@ -62,6 +66,11 @@ LLM_TOKENS = _meter.create_counter(
 LLM_COST = _meter.create_counter(
     "sa.llm.cost_usd", description="Model spend in US dollars, from token counts (T24)"
 )
+
+
+def create_counter(name: str, description: str) -> otel_metrics.Counter:
+    """A counter on the shared meter, for instruments defined next to the code that owns them."""
+    return _meter.create_counter(name, description=description)
 
 
 def configure(service: str, reader: MetricReader | None = None) -> MeterProvider:

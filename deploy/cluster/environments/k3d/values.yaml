@@ -1,0 +1,11 @@
+# The k3d environment's images: what Argo CD runs right now (ADR-021).
+#
+# This branch holds only this file. CI rewrites the four lines below after every green build
+# of main (images.yml), each image by digest, so what runs is exactly what CI built and
+# tested (T20). The chart and everything else come from main, which is protected; this branch
+# is the only place the bot can write. To roll back, revert the commit that changed them.
+images:
+  api: ghcr.io/efiphi/scheduling-agent-api@sha256:1e3add2c8f3571da15c1549ded388ff355bf3034fda1ae347d09f2a0f87a3acf
+  gateway: ghcr.io/efiphi/scheduling-agent-gateway@sha256:d3704f483b1e24fca0d80e893660854b2623550aa9d58623c85f00adf19345e6
+  agent: ghcr.io/efiphi/scheduling-agent-agent@sha256:e434bb7a980634211e5711c68e5ff883fe8daf3502fc5334ed7341f8fdc97831
+  migrations: ghcr.io/efiphi/scheduling-agent-migrations@sha256:7ae2595f6edbf3624c11570ba4fffb53b3c98293953de287947dd165eb58eda2

@@ -1,8 +1,8 @@
 # The shape of the k3d environment's values, for CI to lint and render the chart with.
 #
-# Not what runs: the live image digests are on the deploy/k3d branch, which CI rewrites after
-# every green build of main and Argo CD reads (ADR-021). These digests are from when the two
-# were split, and are left as they are on purpose.
+# Not what runs: Argo CD deploys the deploy/k3d branch, where CI rewrites this file after every
+# green build of main (ADR-021). These digests are from when the two were split, and are left
+# as they are on purpose.
 images:
   api: ghcr.io/efiphi/scheduling-agent-api@sha256:5a853544310ce5bcda20d08703e05ecbe7e5f9f464244d129cc0d1f85ab5ac80
   gateway: ghcr.io/efiphi/scheduling-agent-gateway@sha256:8a14dbe829919186fbc4aae4d496bf748a327a1b728ed2a6e9775a78bd710ee3

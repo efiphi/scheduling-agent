@@ -1,0 +1,32 @@
+{{- /*
+One Ingress per workload with an `ingress` entry: bound to a single Traefik entry point
+(deploy/cluster/traefik/), and only for the listed path prefixes. The gateway exposes its
+OAuth callback and nothing else; the webhook app exposes the webhook and nothing else.
+The NetworkPolicies already let only Traefik reach these pods.
+*/ -}}
+{{- range $name, $w := .Values.workloads }}
+{{- with $w.ingress }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "sa.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: {{ $name }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: {{ .entrypoint }}
+spec:
+  rules:
+    - http:
+        paths:
+          {{- range .paths }}
+          - path: {{ . }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}
+                port: {name: http}
+          {{- end }}
+{{- end }}
+{{- end }}

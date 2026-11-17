@@ -1,0 +1,45 @@
+{{- /*
+One Deployment per entry in .Values.workloads, plus a Service for those with a port.
+The pod spec, with its hardening, is shared with the CronJobs (_helpers.tpl).
+*/ -}}
+{{- range $name, $w := .Values.workloads }}
+{{- $args := dict "root" $ "name" $name "w" $w "restartPolicy" "Always" "waitForNetwork" false }}
+---
+{{ include "sa.serviceAccount" $args }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "sa.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: {{ $name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels:
+        {{- include "sa.workerLabels" $args | nindent 8 }}
+    spec:
+      {{- include "sa.workerPodSpec" $args | nindent 6 }}
+{{- if $w.port }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "sa.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: {{ $name }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    - name: http
+      port: {{ $w.port }}
+      targetPort: http
+{{- end }}
+{{- end }}

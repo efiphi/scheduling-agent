@@ -1,0 +1,3 @@
+# ZAP rules for the api: rule id, IGNORE, and why. Anything not listed fails the scan (ADR-020).
+10049	IGNORE	(Non-storable content: api responses are no-store on purpose)
+100001	IGNORE	(Unexpected content type: the login redirect and a small HTML error page are not JSON, as the schema assumes)

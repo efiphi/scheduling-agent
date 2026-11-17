@@ -1,0 +1,33 @@
+# Extra entry points on k3s's built-in Traefik, so the system answers on the same local
+# addresses it had under Compose: the Google OAuth redirect URIs and the WhatsApp tunnel
+# stay as they are. k3d publishes these ports on 127.0.0.1 only (deploy/k3d/cluster.yaml).
+#
+#   127.0.0.1:8000  api               everything (the web app's backend, login callback)
+#   127.0.0.1:8001  google-gateway    the OAuth callback path only
+#   127.0.0.1:8002  whatsapp-webhook  the webhook path only (the tunnel's target)
+#
+# Each Ingress (the chart's ingress.yaml) binds to exactly one of these entry points, so a
+# path exposed on one port is not reachable on another.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    ports:
+      sa-api:
+        port: 9800
+        exposedPort: 8000
+        expose: {default: true}
+        protocol: TCP
+      sa-gateway:
+        port: 9801
+        exposedPort: 8001
+        expose: {default: true}
+        protocol: TCP
+      sa-webhook:
+        port: 9802
+        exposedPort: 8002
+        expose: {default: true}
+        protocol: TCP

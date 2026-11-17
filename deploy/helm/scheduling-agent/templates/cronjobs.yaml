@@ -1,0 +1,37 @@
+{{- /*
+Scheduled work as CronJobs (E7, E13, UC-M8): each run is a fresh pod that exits when
+done, so a process holding decrypted Google tokens lives for seconds, not for weeks, and
+every run's success or failure is visible in the job history.
+concurrencyPolicy Forbid: a slow run is never overlapped by the next one (the poller also
+holds a per-user Redis lock). A missed run is skipped, not made up later.
+*/ -}}
+{{- range $name, $c := .Values.cronJobs }}
+{{- $args := dict "root" $ "name" $name "w" $c "restartPolicy" "Never" "waitForNetwork" true }}
+---
+{{ include "sa.serviceAccount" $args }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "sa.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: {{ $name }}
+spec:
+  schedule: {{ $c.schedule | quote }}
+  timeZone: {{ $.Values.timeZone | quote }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: {{ $c.startingDeadlineSeconds | default 60 }}
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: {{ $c.backoffLimit | default 0 }}
+      activeDeadlineSeconds: {{ $c.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- include "sa.workerLabels" $args | nindent 12 }}
+        spec:
+          {{- include "sa.workerPodSpec" $args | nindent 10 }}
+{{- end }}

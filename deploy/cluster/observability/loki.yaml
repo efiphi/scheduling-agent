@@ -1,0 +1,33 @@
+# Loki (chart grafana/loki): logs, one process on the local filesystem.
+deploymentMode: SingleBinary
+loki:
+  auth_enabled: false
+  commonConfig: {replication_factor: 1}
+  storage: {type: filesystem}
+  schemaConfig:
+    configs:
+      # Must not be in the future in UTC, or every write before that day fails with a 500.
+      - from: "2026-10-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index: {prefix: index_, period: 24h}
+  # 7 days, like skipped emails (UC-M8): logs carry user ids, so they are not kept forever.
+  limits_config: {retention_period: 168h}
+  compactor: {retention_enabled: true, delete_request_store: filesystem}
+  analytics: {reporting_enabled: false}
+singleBinary:
+  replicas: 1
+  persistence: {size: 2Gi}
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 768Mi}
+backend: {replicas: 0}
+read: {replicas: 0}
+write: {replicas: 0}
+chunksCache: {enabled: false}
+resultsCache: {enabled: false}
+lokiCanary: {enabled: false}
+test: {enabled: false}
+gateway: {enabled: false}
+minio: {enabled: false}

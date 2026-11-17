@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: scheduling-agent
+  namespace: argocd
+spec:
+  project: scheduling-agent
+  # Two sources (ADR-021): the chart from main, which is protected, and the environment's
+  # image digests from deploy/k3d, the only branch the CI bot can write to (images.yml).
+  sources:
+    - repoURL: https://github.com/efiphi/scheduling-agent.git
+      targetRevision: main
+      path: deploy/helm/scheduling-agent
+      helm:
+        releaseName: scheduling-agent
+        valueFiles: [$env/deploy/cluster/environments/k3d/values.yaml]
+    - repoURL: https://github.com/efiphi/scheduling-agent.git
+      targetRevision: deploy/k3d
+      ref: env
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: scheduling-agent
+  syncPolicy:
+    # selfHeal: a change made by hand in the cluster (kubectl edit) is reverted to git.
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true]

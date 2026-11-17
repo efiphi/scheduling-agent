@@ -1,0 +1,132 @@
+# Root of the Python workspace (ADR-001, ADR-006).
+# Every backend service and shared package is a member with its own pyproject.toml and
+# its own dependencies, so each service image ships only what that service needs.
+# One lockfile (uv.lock) pins every version across the workspace (T20).
+
+[project]
+name = "scheduling-agent-workspace"
+version = "0.0.0"
+requires-python = ">=3.12"
+
+[tool.uv]
+package = false
+# OpenTelemetry (Layer 3) at releases at least two weeks old when added (31.10): a release a
+# few days old has had no time for anyone to notice if it was compromised (T20).
+constraint-dependencies = [
+  "opentelemetry-api==1.45.2",
+  "opentelemetry-sdk==1.45.2",
+  "opentelemetry-exporter-otlp-proto-http==1.45.2",
+  "opentelemetry-exporter-otlp-proto-common==1.45.2",
+  "opentelemetry-proto==1.45.2",
+  "opentelemetry-semantic-conventions==0.66b2",
+  "opentelemetry-instrumentation==0.66b2",
+  "opentelemetry-instrumentation-asgi==0.66b2",
+  "opentelemetry-instrumentation-fastapi==0.66b2",
+  "opentelemetry-util-http==0.66b2",
+]
+
+[tool.uv.workspace]
+members = [
+  "packages/db",
+  "packages/shared",
+  "services/agent",
+  "services/api",
+  "services/google_gateway",
+]
+
+[dependency-groups]
+# The workspace members are dev dependencies of the root, so a plain `uv sync`
+# installs every package for local development, tests and type checking.
+dev = [
+  "agent",
+  "api",
+  "db",
+  "google-gateway",
+  "httpx2",
+  "mypy",
+  "pip-audit",
+  "pytest",
+  # Reads the rendered Helm chart in tests/test_helm.py (already in the lock via langchain).
+  "pyyaml",
+  "ruff",
+  "shared",
+]
+
+[tool.uv.sources]
+agent = { workspace = true }
+api = { workspace = true }
+db = { workspace = true }
+google-gateway = { workspace = true }
+shared = { workspace = true }
+
+# --- Lint and format -------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+  "E", "W",  # pycodestyle
+  "F",       # pyflakes: unused imports, undefined names
+  "I",       # import order
+  "B",       # bugbear: likely bugs
+  "UP",      # modern syntax for the target Python
+  "SIM",     # simplifications
+  "RUF",     # ruff-specific checks
+  "S",       # bandit: security issues (hardcoded secrets, unsafe calls)
+]
+
+# Hebrew letters that look like Latin ones. The project reads and writes Hebrew on purpose.
+allowed-confusables = ["ו", "ן", "ס", "י", "׳"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agent", "api", "db", "evals", "google_gateway", "redteam", "shared"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests use plain assert by design.
+"**/tests/**" = ["S101"]
+
+# --- Types -----------------------------------------------------------------
+[tool.mypy]
+strict = true
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+files = [
+  "packages/shared/src",
+  "packages/shared/tests",
+  "services/api/src",
+  "services/api/tests",
+  "packages/db/src",
+  "packages/db/tests",
+  "services/google_gateway/src",
+  "services/google_gateway/tests",
+  "services/agent/src",
+  "services/agent/tests",
+  "evals",
+  "redteam",
+  "tests",
+]
+
+# Google's OAuth helper and API client, and PyYAML, ship without type information.
+[[tool.mypy.overrides]]
+module = ["google_auth_oauthlib.*", "googleapiclient.*", "yaml.*"]
+ignore_missing_imports = true
+
+# --- Tests -----------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = [
+  "packages/shared/tests",
+  "services/api/tests",
+  "packages/db/tests",
+  "services/google_gateway/tests",
+  "services/agent/tests",
+  "tests",
+]
+addopts = ["--strict-markers", "--import-mode=importlib"]
+# Shared fakes for the gateway tests (gateway_fakes.py) importable by name, and the
+# repository root, so tests can import the eval harness (evals/).
+pythonpath = ["services/google_gateway/tests", "services/agent/tests", "services/api/tests", "."]
+markers = [
+  "db: needs a running Postgres with the roles and migrations applied",
+  "redis: needs a running Redis",
+]

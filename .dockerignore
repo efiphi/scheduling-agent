@@ -1,0 +1,15 @@
+# Keep the build context small and free of secrets (T17): only what images need.
+.git
+.github
+.claude
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/node_modules
+**/dist
+web
+docs
+.env
+.env.*

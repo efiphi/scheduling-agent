@@ -1,0 +1,83 @@
+name: Model checks
+
+# The evals and the red team against the real model (ADR-020). Separate from CI because it
+# holds an API key and costs money, about 8 cents a run, so it spends only when the agent's
+# behavior could have changed. Weekly as well: the model can change with no change of ours.
+on:
+  pull_request:
+  schedule:
+    - cron: "17 5 * * 0"
+  workflow_dispatch:
+
+# Least privilege: this job only reads the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: model-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  model:
+    name: Evals and red team (real model)
+    # GitHub gives a fork's pull request no secrets, so skip it instead of failing. The owner
+    # can run this by hand on such a change before merging.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # The key lives in this environment, not in the repository's general secrets.
+    environment: model-evals
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2 # the merge commit and its base, to see what this change touches
+
+      # The job always runs, and always reports, but spends only when it matters.
+      - name: Does this change touch the agent's behavior?
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          pattern='^(services/agent/|packages/shared/|evals/|redteam/|uv\.lock|\.github/workflows/model-checks\.yml|services/google_gateway/src/google_gateway/(policy_guard|email_template)\.py)'
+          if [ "$EVENT" != pull_request ] || git diff --name-only HEAD^1 HEAD | grep -Eq "$pattern"; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing here changes what the agent does, so the model was not called." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        if: steps.changes.outputs.relevant == 'true'
+
+      - if: steps.changes.outputs.relevant == 'true'
+        run: uv sync --locked
+
+      # The key reaches only the two steps that call the model, not uv sync or the upload.
+      - name: Evals
+        if: steps.changes.outputs.relevant == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: uv run python -m evals.extraction.run --json eval-results.json
+
+      # Even when the evals failed: a run should show everything it found at once.
+      - name: Red team
+        if: ${{ !cancelled() && steps.changes.outputs.relevant == 'true' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: uv run python -m redteam.run --json redteam-results.json
+
+      - name: Summary
+        if: ${{ !cancelled() && steps.changes.outputs.relevant == 'true' }}
+        run: uv run python -m redteam.summary eval-results.json redteam-results.json >> "$GITHUB_STEP_SUMMARY"
+
+      # Ids, scores and which check failed. The attack emails and cases are synthetic.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() && steps.changes.outputs.relevant == 'true' }}
+        with:
+          name: model-check-results
+          path: |
+            eval-results.json
+            redteam-results.json
+          if-no-files-found: warn
+          retention-days: 30

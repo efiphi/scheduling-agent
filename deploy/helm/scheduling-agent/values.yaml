@@ -1,0 +1,122 @@
+# Values for the scheduling agent chart. Secrets are NOT here: each component reads a
+# Kubernetes Secret named in `secret:` below, which the Sealed Secrets controller decrypts
+# from deploy/cluster/secrets/ (ADR-008). Every component gets only its own secret.
+# Pods read a Secret when they start: after re-sealing, `kubectl rollout restart`.
+
+images:
+  # Local development: images built by Docker Compose and loaded with `k3d image import`.
+  # Step 2.5 switches to ghcr.io with immutable tags.
+  api: scheduling-agent-api:dev
+  gateway: scheduling-agent-gateway:dev
+  agent: scheduling-agent-agent:dev
+  migrations: scheduling-agent-migrations:dev
+  # Pinned by digest (T20).
+  postgres: postgres:18-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
+  redis: redis:8-alpine@sha256:0bf6577d7774e592b29d093e3ac9390eb91e13d72c21e506afce736de5e0eeb0
+pullPolicy: IfNotPresent
+
+# One entry per process. The deployment template turns each into a Deployment (and a
+# Service when `port` is set). `secret` names the only Secret the process may read.
+# `internet` lets it open HTTPS connections outside the cluster (networkpolicies.yaml):
+# Google for the gateway, Meta and Google sign-in for the api, Anthropic for the agent.
+workloads:
+  api:
+    image: api
+    secret: api
+    internet: true
+    port: 8000
+    # Reachable on 127.0.0.1:8000 through Traefik (ingress.yaml).
+    ingress: {entrypoint: sa-api, paths: [/]}
+    command: [uvicorn, api.main:create_app, --factory, --host, 0.0.0.0, --port, "8000", --no-server-header, --no-access-log]
+    health: /healthz
+    resources: {cpu: 100m, memory: 256Mi}
+  whatsapp-webhook:
+    image: api
+    secret: api
+    internet: true
+    port: 8002
+    # Meta's webhook only, on 127.0.0.1:8002: the Cloudflare tunnel's target (ADR-017).
+    ingress: {entrypoint: sa-webhook, paths: [/whatsapp/webhook]}
+    command: [uvicorn, api.main:create_webhook_app, --factory, --host, 0.0.0.0, --port, "8002", --no-server-header, --no-access-log]
+    health: /healthz
+    resources: {cpu: 50m, memory: 192Mi}
+  notifier:
+    image: api
+    secret: api
+    internet: true
+    command: [python, -m, api.notifier]
+    resources: {cpu: 50m, memory: 192Mi}
+  google-gateway:
+    image: gateway
+    secret: gateway
+    internet: true
+    port: 8001
+    # The OAuth callback only, on 127.0.0.1:8001 (ADR-010).
+    ingress: {entrypoint: sa-gateway, paths: [/oauth/google/callback]}
+    command: [python, -m, google_gateway.serve]
+    health: /healthz
+    env: {GATEWAY_BIND_HOST: 0.0.0.0}
+    resources: {cpu: 50m, memory: 256Mi}
+  calendar-responder:
+    image: gateway
+    secret: gateway
+    internet: true
+    command: [python, -m, google_gateway.free_busy_responder]
+    resources: {cpu: 50m, memory: 256Mi}
+  plan-handler:
+    image: gateway
+    secret: gateway
+    internet: true
+    command: [python, -m, google_gateway.plan_handler]
+    resources: {cpu: 50m, memory: 256Mi}
+  action-executor:
+    image: gateway
+    secret: gateway
+    internet: true
+    command: [python, -m, google_gateway.executor]
+    resources: {cpu: 50m, memory: 256Mi}
+  agent:
+    image: agent
+    secret: agent
+    internet: true
+    command: [python, -m, agent.worker]
+    # The agent never talks to the database: no DB_HOST at all (ADR-011).
+    database: false
+    resources: {cpu: 100m, memory: 256Mi}
+
+# Scheduled jobs (cronjobs.yaml); the same fields as workloads, plus a schedule.
+timeZone: Asia/Jerusalem
+cronJobs:
+  # Every mailbox, every minute (ADR-003). In Compose the same code loops with --every.
+  gmail-poll:
+    image: gateway
+    secret: gateway
+    internet: true
+    schedule: "* * * * *"
+    command: [python, -m, google_gateway.poll, --once]
+    # Killed if still running when the next minute's run is due.
+    activeDeadlineSeconds: 55
+    startingDeadlineSeconds: 30
+    resources: {cpu: 50m, memory: 256Mi}
+  # Skipped emails are kept 7 days only (UC-M8). Runs as scheduling_owner, because no
+  # service may delete rows; its Secret is the migrations one, the only owner credential.
+  purge-skipped:
+    image: migrations
+    secret: migrations
+    redis: false
+    # The migrations image has no OpenTelemetry; this job only logs a count.
+    telemetry: false
+    schedule: "17 3 * * *"
+    command: [python, -m, db.maintenance, purge-skipped]
+    activeDeadlineSeconds: 300
+    backoffLimit: 2
+    resources: {cpu: 50m, memory: 128Mi}
+
+# Where traces and metrics go (Layer 3): Alloy, in the observability namespace.
+telemetry:
+  endpoint: http://alloy.observability.svc.cluster.local:4318
+
+postgres:
+  storage: 2Gi
+redis:
+  storage: 1Gi

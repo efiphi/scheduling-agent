@@ -1,0 +1,67 @@
+{{- /*
+Alembic migrations as a Job, named after its image (migrations-<hash>): a Job's pod template
+cannot change, so a new image needs a new Job, and the old one is pruned. Helm and Argo CD
+both handle that, and nothing reruns while the image stays the same. Not a hook: with
+--wait, Helm runs post-install hooks only after every Deployment is ready, and the workers
+cannot be ready before the tables exist. So the Job starts with everything else and the
+workers restart until it is done.
+The only pod that holds the scheduling_owner password (its own Secret, "migrations").
+*/ -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: migrations
+  labels:
+    {{- include "sa.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrations-{{ .Values.images.migrations | sha256sum | trunc 8 }}
+  labels:
+    {{- include "sa.labels" . | nindent 4 }}
+    app.kubernetes.io/name: migrations
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        {{- include "sa.labels" . | nindent 8 }}
+        app.kubernetes.io/name: migrations
+        scheduling-agent/database: "true"
+    spec:
+      restartPolicy: Never
+      serviceAccountName: migrations
+      automountServiceAccountToken: false
+      # No automatic SERVICE_HOST/SERVICE_PORT variables for every Service: they collide
+      # with our own (REDIS_PORT=tcp://...) and tell a pod about services it never uses.
+      enableServiceLinks: false
+      securityContext:
+        {{- include "sa.podSecurity" . | nindent 8 }}
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: migrations
+          image: {{ .Values.images.migrations | quote }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          # Retry for up to a minute before giving up: a new pod's address reaches the
+          # NetworkPolicy rules a moment after it starts, so the very first connection
+          # to Postgres is refused (seen on k3s). Migrations are idempotent.
+          command:
+            - sh
+            - -c
+            - for i in $(seq 30); do alembic upgrade head && exit 0; sleep 2; done; exit 1
+          securityContext:
+            {{- include "sa.containerSecurity" . | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: migrations
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 256Mi}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}

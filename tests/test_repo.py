@@ -127,5 +127,4 @@ def test_t20_the_bot_writes_image_digests_only_to_the_environment_branch() -> No
 
 def test_argo_cd_reads_the_digests_from_the_environment_branch() -> None:
     app = (ROOT / "deploy" / "cluster" / "argocd" / "apps" / "scheduling-agent.yaml").read_text()
-    assert "targetRevision: deploy/k3d" in app and "ref: env" in app
-    assert "$env/deploy/cluster/environments/k3d/values.yaml" in app
+    assert "targetRevision: deploy/k3d" in app and "targetRevision: main" not in app

@@ -12,11 +12,13 @@ Layer 4 added checks that should stop a bad change, but `main` had no branch pro
 
 ## Decision
 
-The digests live on their own branch, `deploy/k3d`, which holds that one file and nothing else.
+The environment has its own branch, `deploy/k3d`: `main` as tested, plus the image digests.
 
-- **The bot** checks out `deploy/k3d`, rewrites the digests and pushes there. It never writes to `main`, and a test checks this.
-- **Argo CD** uses two sources: the chart and everything else from `main`, and the values file from `deploy/k3d` (`ref: env`).
+- **The bot**, after each green build of `main`, merges that commit into `deploy/k3d`, rewrites the digests and pushes there. It never writes to `main`, and a test checks this.
+- **Argo CD** deploys `deploy/k3d`. Chart and images change together, in one commit, only after CI passed.
 - **`main`** gets a ruleset with no exceptions: every CI check must pass, no force pushes and no deletion.
+
+A first version kept only the values file on `deploy/k3d` and read the chart from `main`, with two sources in one Argo CD Application. Argo CD refuses that: one Application cannot read two revisions of the same repository.
 
 `main` keeps a copy of the values file for CI to lint and render the chart with. Its digests are left stale on purpose, and a comment says so.
 
@@ -31,5 +33,6 @@ The digests live on their own branch, `deploy/k3d`, which holds that one file an
 - **Positive:** nothing reaches `main` without green checks, the bot included. No new secret.
 - **Positive:** a compromised bot can change which images run, not the code or the chart. It can only point at images, and only at digests CI built from green commits on `main`.
 - **Negative:** the bot's token can still write to `deploy/k3d`, which has no protection. Someone who took over that job could point the cluster at another image. Signing images and checking signatures in the cluster (cosign) would close this; it is a follow-up.
-- **Negative:** deployments no longer show up in `main`'s history. They are in `deploy/k3d`'s history, one commit per deployment.
-- **Negative:** what runs is spread over two branches, so a reader has to know where to look. The values file on `main` says so.
+- **Positive:** what runs is one commit, so rolling back is reverting it on `deploy/k3d`.
+- **Negative:** deployments no longer show up in `main`'s history. They are in `deploy/k3d`'s history, one merge and one digest commit per deployment.
+- **Negative:** a chart change on `main` reaches the cluster only with the next image build. Every green build of `main` makes one, so in practice it is minutes.

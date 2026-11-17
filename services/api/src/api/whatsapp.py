@@ -109,7 +109,8 @@ def _digest(value: str) -> str:
 
 
 class WhatsAppSender(Protocol):
-    def send_text(self, to: str, text: str) -> None: ...
+    # send_text and send_template may return False when Meta refused the message.
+    def send_text(self, to: str, text: str) -> bool | None: ...
 
     def send_buttons(self, to: str, text: str, buttons: list[tuple[str, str]]) -> None:
         """Up to three reply buttons as (id, title)."""
@@ -117,7 +118,7 @@ class WhatsAppSender(Protocol):
 
     def send_template(
         self, to: str, name: str, language: str, params: tuple[str, ...] = ()
-    ) -> None: ...
+    ) -> bool | None: ...
 
 
 class MetaSender:
@@ -125,8 +126,8 @@ class MetaSender:
         self._token = token
         self._url = f"{GRAPH}/{phone_number_id}/messages"
 
-    def send_text(self, to: str, text: str) -> None:
-        self._post({"to": to, "type": "text", "text": {"body": text}})
+    def send_text(self, to: str, text: str) -> bool:
+        return self._post({"to": to, "type": "text", "text": {"body": text}})
 
     def send_buttons(self, to: str, text: str, buttons: list[tuple[str, str]]) -> None:
         self._post(
@@ -148,16 +149,16 @@ class MetaSender:
 
     def send_template(
         self, to: str, name: str, language: str, params: tuple[str, ...] = ()
-    ) -> None:
+    ) -> bool:
         template: dict[str, Any] = {"name": name, "language": {"code": language}}
         if params:
             # Values for the template's {{1}}, {{2}}...: Meta fills them into approved text.
             template["components"] = [
                 {"type": "body", "parameters": [{"type": "text", "text": p} for p in params]}
             ]
-        self._post({"to": to, "type": "template", "template": template})
+        return self._post({"to": to, "type": "template", "template": template})
 
-    def _post(self, message: dict[str, Any]) -> None:
+    def _post(self, message: dict[str, Any]) -> bool:
         response = httpx2.post(
             self._url,
             json={"messaging_product": "whatsapp", **message},
@@ -167,6 +168,8 @@ class MetaSender:
         if response.status_code >= 300:
             # Status only: the response body can echo the message (T22).
             logger.error("whatsapp send failed: status=%s", response.status_code)
+            return False
+        return True
 
 
 def agent_display_number(token: SecretStr, phone_number_id: str) -> str:

@@ -104,3 +104,9 @@ def test_t24_a_storm_of_alerts_is_capped_per_hour() -> None:
     outcomes = post(s, *[alert()] * (MAX_MESSAGES_PER_HOUR + 3)).json()["outcomes"]
     assert outcomes.count("sent") == MAX_MESSAGES_PER_HOUR
     assert outcomes.count("capped") == 3
+
+
+def test_e13_a_message_meta_refused_is_reported_as_failed() -> None:
+    s = make(window=False)
+    s.sender.send_template = lambda *args, **kwargs: False  # type: ignore[method-assign,assignment]
+    assert post(s, alert()).json() == {"outcomes": ["send_failed"]}

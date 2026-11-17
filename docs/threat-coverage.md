@@ -51,4 +51,4 @@ This table says what is checked. Whether it passes is reported by CI.
 | E10 | טעויות ב-thread עם כמה משתתפים | 3 |  |  |
 | E11 | ביטול או שינוי של האירוע הלא נכון |  |  | No cancelling or moving events yet: the only actions are a reply and a new event. Needs tests when UC-M4 and UC-M5 are built. |
 | E12 | עייפות אישורים |  |  | A human factor. Measuring it needs real use over time, and the MVP has no such data. |
-| E13 | כשל שקט | 16 |  |  |
+| E13 | כשל שקט | 17 |  |  |

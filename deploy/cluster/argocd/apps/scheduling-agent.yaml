@@ -5,13 +5,14 @@ metadata:
   namespace: argocd
 spec:
   project: scheduling-agent
+  # The environment branch (ADR-021): main, as tested, plus the image digests the CI bot
+  # writes after each green build. The bot can write to deploy/k3d only; main is protected.
   source:
     repoURL: https://github.com/efiphi/scheduling-agent.git
-    targetRevision: main
+    targetRevision: deploy/k3d
     path: deploy/helm/scheduling-agent
     helm:
       releaseName: scheduling-agent
-      # The environment's images, rewritten by CI after each green build (images.yml).
       valueFiles: [../../cluster/environments/k3d/values.yaml]
   destination:
     server: https://kubernetes.default.svc

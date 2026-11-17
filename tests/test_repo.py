@@ -116,3 +116,15 @@ def test_every_zap_exception_gives_a_reason() -> None:
             if line and not line.startswith("#"):
                 _rule, action, reason = line.split("\t")
                 assert action == "IGNORE" and reason.startswith("(") and len(reason) > 10, line
+
+
+def test_t20_the_bot_writes_image_digests_only_to_the_environment_branch() -> None:
+    # main is protected; the one job that can write must never push there (ADR-021).
+    images = (ROOT / ".github" / "workflows" / "images.yml").read_text()
+    assert "ref: deploy/k3d" in images and "git push origin HEAD:deploy/k3d" in images
+    assert not re.search(r"git push\b[^\n]*\bmain\b", images)
+
+
+def test_argo_cd_reads_the_digests_from_the_environment_branch() -> None:
+    app = (ROOT / "deploy" / "cluster" / "argocd" / "apps" / "scheduling-agent.yaml").read_text()
+    assert "targetRevision: deploy/k3d" in app and "targetRevision: main" not in app

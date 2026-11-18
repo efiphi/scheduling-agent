@@ -15,6 +15,12 @@ images:
   redis: redis:8-alpine@sha256:0bf6577d7774e592b29d093e3ac9390eb91e13d72c21e506afce736de5e0eeb0
 pullPolicy: IfNotPresent
 
+# Empty: each process reserves its whole limit (resources.memory), so the scheduler never
+# overfills a node. A small server can set a lower reservation for all of them, closer to
+# what a process really uses (~80Mi), and keep the limits; under memory pressure Kubernetes
+# then evicts whichever pod is furthest over its reservation.
+memoryRequest: ""
+
 # One entry per process. The deployment template turns each into a Deployment (and a
 # Service when `port` is set). `secret` names the only Secret the process may read.
 # `internet` lets it open HTTPS connections outside the cluster (networkpolicies.yaml):

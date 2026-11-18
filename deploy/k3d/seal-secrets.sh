@@ -2,6 +2,8 @@
 # Seal the chart's Secrets from deploy/compose/.env into SealedSecrets that can be committed
 # (ADR-008). Run once per cluster, and again whenever a value in .env changes:
 #   deploy/k3d/seal-secrets.sh     # writes deploy/cluster/secrets/k3d/*.yaml
+#   KUBECONFIG=~/.kube/sa-aws OUT_DIR=deploy/cluster/secrets/aws deploy/k3d/seal-secrets.sh
+#                                  # the cloud cluster, through deploy/aws/kube.sh's tunnel
 #
 # Each Secret gets only the keys its component needs, the same split as Compose
 # (invariants 1, 7, 8): the agent never sees a database password or a Google key, the api
@@ -18,8 +20,10 @@ set -euo pipefail
 ENV_FILE="${ENV_FILE:-deploy/compose/.env}"
 NAMESPACE="${NAMESPACE:-scheduling-agent}"
 OUT_DIR="${OUT_DIR:-deploy/cluster/secrets/k3d}"
+# The monitoring namespace's secrets, for this same cluster's key.
+OBS_OUT_DIR="${OBS_OUT_DIR:-$OUT_DIR/observability}"
 [[ -f "$ENV_FILE" ]] || { echo "missing $ENV_FILE" >&2; exit 1; }
-mkdir -p "$OUT_DIR"
+mkdir -p "$OUT_DIR" "$OBS_OUT_DIR"
 
 workdir="$(mktemp -d)"
 chmod 700 "$workdir"
@@ -72,8 +76,8 @@ seal migrations "$workdir/migrations.env"
 # The token Alertmanager sends to the alert relay (ADR-022). The relay reads it from the api
 # Secret above; Alertmanager reads this copy, in its own namespace, as a mounted file.
 printf 'token=%s\n' "$(value ALERT_RELAY_TOKEN)" > "$workdir/alert-relay-token.env"
-seal alert-relay-token "$workdir/alert-relay-token.env" observability deploy/cluster/observability/manifests
+seal alert-relay-token "$workdir/alert-relay-token.env" observability "$OBS_OUT_DIR"
 
 # Grafana's admin login, in the observability namespace, with the key names its chart reads.
 printf 'admin-user=admin\nadmin-password=%s\n' "$(value GRAFANA_ADMIN_PASSWORD)" > "$workdir/grafana-admin.env"
-seal grafana-admin "$workdir/grafana-admin.env" observability deploy/cluster/observability/manifests
+seal grafana-admin "$workdir/grafana-admin.env" observability "$OBS_OUT_DIR"

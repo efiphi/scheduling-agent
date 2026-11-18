@@ -1,0 +1,25 @@
+# The cloud cluster's "app of apps" (ADR-023), applied by hand once after install.sh, like
+# root.yaml on k3d. It takes the shared Applications from apps/ (projects, the Sealed Secrets
+# controller, monitoring) and the cloud's own from apps-aws/ (the application with its
+# values, and Secrets sealed with this cluster's key). k3d's Traefik ports and k3d's sealed
+# Secrets stay out: the include list names only the shared files.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/efiphi/scheduling-agent.git
+      targetRevision: main
+      path: deploy/cluster/argocd/apps
+      directory: {include: "{projects.yaml,sealed-secrets.yaml,observability.yaml}"}
+    - repoURL: https://github.com/efiphi/scheduling-agent.git
+      targetRevision: main
+      path: deploy/cluster/argocd/apps-aws
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}

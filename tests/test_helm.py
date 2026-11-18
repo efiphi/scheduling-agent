@@ -512,6 +512,21 @@ def test_the_cloud_does_not_poll_the_mailbox_k3d_still_polls(
 
 
 @needs_helm
+def test_the_cloud_relay_waits_for_the_data_k3d_keeps_one(
+    objects: list[dict[str, Any]], aws_objects: list[dict[str, Any]]
+) -> None:
+    def replicas(objs: list[dict[str, Any]]) -> dict[str, int]:
+        return {
+            o["metadata"]["name"]: o["spec"]["replicas"] for o in objs if o["kind"] == "Deployment"
+        }
+
+    k3d, aws = replicas(objects), replicas(aws_objects)
+    assert set(k3d.values()) == {1}
+    assert aws.pop("alert-relay") == 0
+    assert set(aws.values()) == {1}
+
+
+@needs_helm
 def test_the_cloud_reserves_less_memory_but_keeps_every_limit(
     objects: list[dict[str, Any]], aws_objects: list[dict[str, Any]]
 ) -> None:

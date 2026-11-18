@@ -1,0 +1,94 @@
+name: Terraform
+
+# Checks every Terraform stack in infra/terraform (ADR-023): formatting, validity, a security
+# scan, and a plan against the real account. CI never applies: it can read AWS, not change it.
+# Applying stays a manual step from the owner's own login.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # an OIDC token for AWS: no stored key anywhere
+
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TERRAFORM_VERSION: "1.17.1"
+  TERRAFORM_SHA256: 4638628058e71a55212b1c563712eac03b902128f40740f3dc8174df12135061
+  TRIVY_VERSION: "0.75.0"
+  TRIVY_SHA256: c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f
+
+jobs:
+  terraform:
+    name: Terraform (fmt, validate, Trivy, plan)
+    # A fork's pull request gets no OIDC token for our role, so it is skipped.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Does this change touch infrastructure?
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != pull_request ] || git diff --name-only HEAD^1 HEAD | grep -Eq '^(infra/|\.github/workflows/terraform\.yml)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing here changes infrastructure." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # The same release as on the owner's machine, checked against a pinned checksum (T20).
+      - name: Install Terraform and Trivy
+        if: steps.changes.outputs.relevant == 'true'
+        run: |
+          mkdir -p "$HOME/bin"
+          zip="terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
+          curl -fsSLO "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/${zip}"
+          echo "${TERRAFORM_SHA256}  ${zip}" | sha256sum -c -
+          unzip -q "$zip" terraform -d "$HOME/bin"
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}"
+          echo "${TRIVY_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" -C "$HOME/bin" trivy
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Formatting
+        if: steps.changes.outputs.relevant == 'true'
+        run: terraform fmt -check -recursive -diff infra/terraform
+
+      # Misconfigurations such as a public bucket or an open port, before anything is applied.
+      - name: Security scan (Trivy)
+        if: steps.changes.outputs.relevant == 'true'
+        run: trivy config --quiet --exit-code 1 --severity HIGH,CRITICAL infra/terraform
+
+      - name: AWS login with the read-only plan role (OIDC)
+        if: steps.changes.outputs.relevant == 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::571771087482:role/github-terraform-plan
+          aws-region: eu-central-1
+
+      # The budget's alert address stays out of the public repository, so it comes from a
+      # repository secret; a placeholder would show up in every plan as a change.
+      - name: Validate and plan each stack
+        if: steps.changes.outputs.relevant == 'true'
+        env:
+          TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
+          TF_IN_AUTOMATION: "1"
+        run: |
+          for stack in infra/terraform/*/; do
+            echo "## $stack" >> "$GITHUB_STEP_SUMMARY"
+            terraform -chdir="$stack" init -input=false -lockfile=readonly
+            terraform -chdir="$stack" validate
+            terraform -chdir="$stack" plan -input=false -lock=false -no-color | tee plan.txt
+            grep -E '^(Plan:|No changes)' plan.txt >> "$GITHUB_STEP_SUMMARY" || true
+          done

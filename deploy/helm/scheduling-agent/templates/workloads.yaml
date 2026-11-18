@@ -15,7 +15,8 @@ metadata:
     {{- include "sa.labels" $ | nindent 4 }}
     app.kubernetes.io/name: {{ $name }}
 spec:
-  replicas: 1
+  # An environment can scale a process to 0 (hasKey, because `default` would turn 0 into 1).
+  replicas: {{ ternary $w.replicas 1 (hasKey $w "replicas") }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ $name }}

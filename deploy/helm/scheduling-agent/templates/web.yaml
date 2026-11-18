@@ -59,7 +59,9 @@ spec:
           resources:
             requests:
               cpu: {{ .Values.cpuRequest | default .Values.web.resources.cpu }}
-              memory: {{ .Values.memoryRequest | default .Values.web.resources.memory }}
+              # Its own, not memoryRequest: that one lowers the Python processes' reservation
+              # (128Mi), which is more than nginx's whole limit.
+              memory: {{ .Values.web.resources.memory }}
             limits: {memory: {{ .Values.web.resources.memory }}}
           volumeMounts:
             - {name: tmp, mountPath: /tmp}

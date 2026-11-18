@@ -142,11 +142,12 @@ data "aws_iam_policy_document" "github_plan_trust" {
       values   = ["sts.amazonaws.com"]
     }
     # Only pull requests in this repository: a fork gets no OIDC token for it, and no other
-    # repository can assume the role.
+    # repository can assume the role. GitHub puts the owner's and the repository's numeric IDs
+    # in the subject, so a new repository that later takes the same name gets nothing.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:pull_request"]
+      values   = ["repo:${var.github_subject_prefix}:pull_request"]
     }
   }
 }

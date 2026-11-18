@@ -10,6 +10,15 @@ variable "github_repository" {
   default     = "efiphi/scheduling-agent"
 }
 
+variable "github_subject_prefix" {
+  description = <<-EOT
+    The repository in GitHub's OIDC subject: owner and name with their immutable numeric IDs,
+    as `gh api repos/OWNER/REPO/actions/oidc/customization/sub` reports it.
+  EOT
+  type        = string
+  default     = "efiphi@121872705/scheduling-agent@1430659877"
+}
+
 variable "monthly_budget_usd" {
   description = "The whole account's monthly budget; email alerts at 85%, 100% and forecast 100%."
   type        = number

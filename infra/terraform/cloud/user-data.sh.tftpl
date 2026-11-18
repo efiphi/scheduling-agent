@@ -1,0 +1,84 @@
+#!/bin/bash
+# Runs once on every new server, after a spot interruption too (ADR-023):
+#   1. take over the fixed public address;
+#   2. attach the data volume, which holds k3s's whole state, and mount it;
+#   3. install k3s at a pinned version, checked against its published SHA-256 (T20);
+#   4. start it under the same node name, so it is the same cluster as before.
+set -euo pipefail
+exec > >(tee -a /var/log/scheduling-agent-boot.log) 2>&1
+
+REGION="${region}"
+VOLUME_ID="${volume_id}"
+
+token=$(curl -sf -X PUT http://169.254.169.254/latest/api/token \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+instance_id=$(curl -sf -H "X-aws-ec2-metadata-token: $token" \
+  http://169.254.169.254/latest/meta-data/instance-id)
+
+# 1. The address. --allow-reassociation takes it from a server that is going away.
+aws ec2 associate-address --region "$REGION" --allocation-id "${eip_allocation}" \
+  --instance-id "$instance_id" --allow-reassociation
+
+# 2. The data volume. After an interruption the old server may still be releasing it.
+for _ in $(seq 120); do
+  state=$(aws ec2 describe-volumes --region "$REGION" --volume-ids "$VOLUME_ID" \
+    --query 'Volumes[0].State' --output text)
+  [ "$state" = available ] && break
+  sleep 5
+done
+aws ec2 attach-volume --region "$REGION" --volume-id "$VOLUME_ID" \
+  --instance-id "$instance_id" --device /dev/sdf
+
+# Nitro instances name EBS volumes nvme*; the volume id, without its dash, is the serial.
+serial=$(echo "$VOLUME_ID" | tr -d '-')
+by_id="/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_$serial"
+for _ in $(seq 60); do [ -e "$by_id" ] && break; sleep 2; done
+device=$(readlink -f "$by_id")
+blkid "$device" || mkfs.ext4 -L sa-data "$device" # formatted on the very first boot only
+mkdir -p /var/lib/rancher
+mount "$device" /var/lib/rancher
+echo "LABEL=sa-data /var/lib/rancher ext4 defaults,nofail 0 2" >> /etc/fstab
+
+# A little swap, so a memory spike slows the server down instead of killing a pod.
+if [ ! -f /swapfile ]; then
+  dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+  chmod 600 /swapfile
+  mkswap /swapfile
+fi
+swapon /swapfile
+
+# 3. k3s, pinned and verified. No install script piped into a shell.
+curl -fsSL -o /usr/local/bin/k3s \
+  "https://github.com/k3s-io/k3s/releases/download/${replace(k3s_version, "+", "%2B")}/k3s-arm64"
+echo "${k3s_sha256}  /usr/local/bin/k3s" | sha256sum -c -
+chmod 0755 /usr/local/bin/k3s
+for tool in kubectl crictl ctr; do ln -sf /usr/local/bin/k3s "/usr/local/bin/$tool"; done
+
+# 4. The same node name every time, so a new instance continues the same cluster.
+cat > /etc/systemd/system/k3s.service <<'UNIT'
+[Unit]
+Description=k3s (scheduling-agent)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/k3s server \
+  --node-name sa-cloud \
+  --write-kubeconfig-mode 0600 \
+  --secrets-encryption
+KillMode=process
+Delegate=yes
+LimitNOFILE=1048576
+LimitNPROC=infinity
+TasksMax=infinity
+TimeoutStartSec=0
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now k3s
+echo "boot done: instance=$instance_id"

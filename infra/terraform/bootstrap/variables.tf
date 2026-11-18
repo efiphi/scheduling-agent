@@ -22,7 +22,7 @@ variable "github_subject_prefix" {
 variable "monthly_budget_usd" {
   description = "The whole account's monthly budget; email alerts at 85%, 100% and forecast 100%."
   type        = number
-  default     = 20
+  default     = 25
 }
 
 variable "alert_email" {

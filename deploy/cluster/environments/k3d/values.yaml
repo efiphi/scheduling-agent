@@ -5,7 +5,7 @@
 # tested (T20). The chart and everything else come from main, which is protected; this branch
 # is the only place the bot can write. To roll back, revert the commit that changed them.
 images:
-  api: ghcr.io/efiphi/scheduling-agent-api@sha256:46886eb42a25eeb965142d9201a007ed0317a51934828cc16461c65270c6baae
-  gateway: ghcr.io/efiphi/scheduling-agent-gateway@sha256:a98ee37e6c88320a29344526f20e3189bbf345e6c2ad2f1b8e280054288cb2f1
-  agent: ghcr.io/efiphi/scheduling-agent-agent@sha256:92d4a8f49f32e0c3d49f21086d0f316bb5e91e3765c3f026d933d8008f0dd317
-  migrations: ghcr.io/efiphi/scheduling-agent-migrations@sha256:643236c23168a894dca2c2f57068bc26a8ff7079ef0cee6ea754f71ed4b70564
+  api: ghcr.io/efiphi/scheduling-agent-api@sha256:5bf9086dc688a08a780c6d37424d37fe2c68f18aae891a2c91d5a4a1eb18d8fa
+  gateway: ghcr.io/efiphi/scheduling-agent-gateway@sha256:c9cb677bc4f62fcfca5fef244e42f3350ff1cd914aa0ea7409785a0319f9dcb2
+  agent: ghcr.io/efiphi/scheduling-agent-agent@sha256:55f8c28bd047bb002b6bc1f67458df0f3516ea5e34178e8ded931d0646ffc857
+  migrations: ghcr.io/efiphi/scheduling-agent-migrations@sha256:4df9f73b51827b988d03ff8a230dbb9df79c47509bfe2b941482af126be4b533

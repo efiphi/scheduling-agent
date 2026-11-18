@@ -14,11 +14,22 @@ variable "availability_zone" {
 
 variable "instance_types" {
   description = <<-EOT
-    4 GiB ARM types, cheapest first. The system uses about 3 GiB (measured on k3d, 18.11).
-    More than one type gives spot more pools to choose from when one runs out.
+    4 GiB ARM types with a full core, no CPU credits. The system uses about 3 GiB.
+    Not t4g: this account cannot run burstable types in "unlimited" mode, and in "standard"
+    mode a new spot server starts with no credits, gets 20% of each core, and k3s fails to
+    start (seen 18.11). More than one type gives spot more pools when one runs out.
   EOT
   type        = list(string)
-  default     = ["t4g.medium", "m7g.medium"]
+  default     = ["m6g.medium", "m8g.medium"]
+}
+
+variable "spot_max_price" {
+  description = <<-EOT
+    The most an hour may cost, in USD: $0.03 is about $22 a month, about $28 with the disks
+    and the address. Above it AWS gives no server (the agent waits) rather than a bigger bill.
+  EOT
+  type        = string
+  default     = "0.03"
 }
 
 variable "ami_id" {

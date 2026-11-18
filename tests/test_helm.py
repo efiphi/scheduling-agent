@@ -501,7 +501,7 @@ def test_the_cloud_does_not_poll_the_mailbox_k3d_still_polls(
     objects: list[dict[str, Any]], aws_objects: list[dict[str, Any]]
 ) -> None:
     # Two clusters on one demo mailbox would each answer the same email (until step 6.5).
-    def poll(objs: list[dict[str, Any]]) -> dict[str, Any]:
+    def poll(objs: list[dict[str, Any]]) -> Any:
         [job] = [
             o for o in objs if o["kind"] == "CronJob" and o["metadata"]["name"] == "gmail-poll"
         ]

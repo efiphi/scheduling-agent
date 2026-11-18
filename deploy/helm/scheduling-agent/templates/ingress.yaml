@@ -1,11 +1,22 @@
 {{- /*
-One Ingress per workload with an `ingress` entry: bound to a single Traefik entry point
-(deploy/cluster/traefik/), and only for the listed path prefixes. The gateway exposes its
-OAuth callback and nothing else; the webhook app exposes the webhook and nothing else.
-The NetworkPolicies already let only Traefik reach these pods.
+One Ingress per workload with an `ingress` entry, only for the listed path prefixes. The
+gateway exposes its OAuth callback and nothing else; the webhook app exposes the webhook
+and nothing else. The NetworkPolicies already let only Traefik reach these pods.
+
+Two shapes:
+  - k3d (publicHost empty): each Ingress is bound to its own Traefik entry point, a local
+    port (deploy/cluster/traefik/), routed by path only.
+  - A public address (publicHost set, the cloud server, ADR-023): one host on HTTPS only
+    (websecure), with a Let's Encrypt certificate from Traefik's "letsencrypt" resolver
+    (deploy/cluster/traefik-aws/). `ingress.public` gives the paths there; the api lives
+    under /api, which a Middleware strips, so the browser sees one origin for the web app
+    and its backend (the session cookie works, no CORS).
 */ -}}
+{{- $host := .Values.publicHost }}
 {{- range $name, $w := .Values.workloads }}
 {{- with $w.ingress }}
+{{- $public := .public | default dict }}
+{{- $paths := ternary ($public.paths | default .paths) .paths (ne $host "") }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -15,12 +26,24 @@ metadata:
     {{- include "sa.labels" $ | nindent 4 }}
     app.kubernetes.io/name: {{ $name }}
   annotations:
+    {{- if $host }}
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
+    {{- with $public.stripPrefix }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ $.Release.Namespace }}-strip-{{ $name }}@kubernetescrd
+    {{- end }}
+    {{- else }}
     traefik.ingress.kubernetes.io/router.entrypoints: {{ .entrypoint }}
+    {{- end }}
 spec:
   rules:
-    - http:
+    - {{- if $host }}
+      host: {{ $host }}
+      {{- end }}
+      http:
         paths:
-          {{- range .paths }}
+          {{- range $paths }}
           - path: {{ . }}
             pathType: Prefix
             backend:
@@ -28,5 +51,44 @@ spec:
                 name: {{ $name }}
                 port: {name: http}
           {{- end }}
+{{- if and $host $public.stripPrefix }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-{{ $name }}
+  labels:
+    {{- include "sa.labels" $ | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes: [{{ $public.stripPrefix }}]
 {{- end }}
+{{- end }}
+{{- end }}
+{{- if and $host .Values.web.enabled }}
+---
+# The web app: everything the other Ingresses do not claim. Traefik tries longer paths first,
+# so /api, /oauth/google/callback and /whatsapp/webhook still reach their services.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  labels:
+    {{- include "sa.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: web
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
+spec:
+  rules:
+    - host: {{ $host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port: {name: http}
 {{- end }}

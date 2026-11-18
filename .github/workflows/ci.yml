@@ -116,6 +116,20 @@ jobs:
           docker logs gateway
           exit 1
 
+      # The cloud's web app (6.4) runs as it will there: read-only, not root, no capabilities,
+      # and every response carries the security headers (T19, T21).
+      - name: Build and smoke-test the web image
+        run: |
+          docker build -t scheduling-agent-web:ci web
+          docker run -d --name web --read-only --tmpfs /tmp --user 10001:10001 --cap-drop ALL \
+            --security-opt no-new-privileges -p 127.0.0.1:8080:8080 scheduling-agent-web:ci
+          for i in $(seq 1 20); do curl -sf -o /dev/null http://127.0.0.1:8080/healthz && break; sleep 1; done
+          headers=$(curl -sfI http://127.0.0.1:8080/some/page) || { docker logs web; exit 1; }
+          for h in "frame-ancestors 'none'" "X-Content-Type-Options: nosniff" "Strict-Transport-Security"; do
+            grep -qi "$h" <<<"$headers" || { echo "missing header: $h"; exit 1; }
+          done
+          curl -sf http://127.0.0.1:8080/ | grep -q 'http-equiv="Content-Security-Policy"'
+
       # Placeholder values only; real secrets live in a git-ignored .env (T17).
       - name: Validate Compose file
         env:

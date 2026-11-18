@@ -10,10 +10,20 @@ images:
   gateway: scheduling-agent-gateway:dev
   agent: scheduling-agent-agent:dev
   migrations: scheduling-agent-migrations:dev
+  web: scheduling-agent-web:dev
   # Pinned by digest (T20).
   postgres: postgres:18-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5
   redis: redis:8-alpine@sha256:0bf6577d7774e592b29d093e3ac9390eb91e13d72c21e506afce736de5e0eeb0
 pullPolicy: IfNotPresent
+
+# Empty on k3d: each service on its own local port. Set to a host name, every Ingress uses
+# that host on HTTPS with a Let's Encrypt certificate (ingress.yaml, ADR-023).
+publicHost: ""
+
+# The built web app behind nginx (web.yaml). Off on k3d, where Vite's dev server serves it.
+web:
+  enabled: false
+  resources: {cpu: 10m, memory: 32Mi}
 
 # Empty: each process reserves its whole limit (resources.memory), so the scheduler never
 # overfills a node. A small server can set a lower reservation for all of them, closer to
@@ -38,8 +48,9 @@ workloads:
     secret: api
     internet: true
     port: 8000
-    # Reachable on 127.0.0.1:8000 through Traefik (ingress.yaml).
-    ingress: {entrypoint: sa-api, paths: [/]}
+    # Reachable on 127.0.0.1:8000 through Traefik (ingress.yaml); under /api on a public
+    # address, next to the web app.
+    ingress: {entrypoint: sa-api, paths: [/], public: {paths: [/api], stripPrefix: /api}}
     command: [uvicorn, api.main:create_app, --factory, --host, 0.0.0.0, --port, "8000", --no-server-header, --no-access-log]
     health: /healthz
     resources: {cpu: 100m, memory: 256Mi}

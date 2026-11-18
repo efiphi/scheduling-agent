@@ -56,7 +56,8 @@ describe("status banners", () => {
       act(() => {
         window.dispatchEvent(new Event("offline"));
       });
-      expect(screen.getByRole("alert", { name: "אין חיבור לרשת" })).toBeInTheDocument();
+      // Waits for the re-render: on a busy CI runner it can land after act() returns.
+      expect(await screen.findByRole("alert", { name: "אין חיבור לרשת" })).toBeInTheDocument();
     } finally {
       delete (navigator as { onLine?: boolean }).onLine;
       if (original) Object.defineProperty(Navigator.prototype, "onLine", original);

@@ -37,7 +37,7 @@ export default defineConfig({
     // Bind to loopback only; the dev server is never exposed on the network.
     host: "127.0.0.1",
     // /api goes to the api service, so the browser sees one origin: the session cookie
-    // is sent and no CORS is needed. nginx does the same in production.
+    // is sent and no CORS is needed. Traefik does the same on the cloud server (ingress.yaml).
     proxy: {
       "/api": {
         target: "http://127.0.0.1:8000",

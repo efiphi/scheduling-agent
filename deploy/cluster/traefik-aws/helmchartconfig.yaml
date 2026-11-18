@@ -1,0 +1,29 @@
+# k3s's built-in Traefik on the cloud server (ADR-023): the only door in, on 80 and 443
+# (the security group opens nothing else).
+#
+#   - Plain HTTP only redirects to HTTPS. Let's Encrypt's HTTP-01 check still answers on
+#     port 80: Traefik serves the challenge before the redirect.
+#   - Certificates from Let's Encrypt (resolver "letsencrypt", the chart's ingress.yaml asks
+#     for it), renewed by Traefik before they expire.
+#   - Kept on a small volume (the server's data disk), so a restart or a spot replacement
+#     does not ask for a new certificate each time (Let's Encrypt limits how often).
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    ports:
+      web:
+        http:
+          redirections:
+            entryPoint: {to: websecure, scheme: https, permanent: true}
+    persistence:
+      enabled: true
+      size: 128Mi
+    certificatesResolvers:
+      letsencrypt:
+        acme:
+          storage: /data/acme.json
+          httpChallenge: {entryPoint: web}

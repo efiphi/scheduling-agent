@@ -540,7 +540,7 @@ def test_the_cloud_reserves_less_memory_and_cpu_but_keeps_every_limit(
             name: spec["containers"][0]["resources"]
             for name, spec in pod_specs(objs).items()
             # Fixed reservations of their own; the migrations Job's name carries the image hash.
-            if name not in {"postgres", "redis"} and not name.startswith("migrations-")
+            if name not in {"postgres", "redis", "web"} and not name.startswith("migrations-")
         }
 
     k3d, aws = resources(objects), resources(aws_objects)
@@ -561,7 +561,7 @@ def test_the_cloud_uses_its_public_address(aws_objects: list[dict[str, Any]]) ->
 
     base = "https://agent.efi-agent.dev"
     assert env("api")["WEB_APP_URL"] == f"{base}/"
-    assert env("api")["GOOGLE_LOGIN_REDIRECT_URI"] == f"{base}/auth/google/callback"
+    assert env("api")["GOOGLE_LOGIN_REDIRECT_URI"] == f"{base}/api/auth/google/callback"
     assert env("notifier")["WEB_APP_URL"] == f"{base}/"
     assert env("google-gateway")["GOOGLE_CONNECT_REDIRECT_URI"] == f"{base}/oauth/google/callback"
 
@@ -580,10 +580,85 @@ def test_the_cloud_root_takes_shared_apps_only_never_k3ds() -> None:
         "scheduling-agent.yaml",
         "secrets-aws.yaml",
         "secrets-aws-observability.yaml",
+        "traefik-config.yaml",
     }
     # The same Application names as k3d, so the two clusters read alike.
     names = {
         yaml.safe_load(p.read_text())["metadata"]["name"]
         for p in (ROOT / own["path"]).glob("*.yaml")
     }
-    assert names == {"scheduling-agent", "secrets-aws", "secrets-aws-observability"}
+    assert names == {
+        "scheduling-agent",
+        "secrets-aws",
+        "secrets-aws-observability",
+        "traefik-config",
+    }
+
+
+@needs_helm
+def test_the_cloud_serves_everything_on_one_https_host(
+    objects: list[dict[str, Any]], aws_objects: list[dict[str, Any]]
+) -> None:
+    def ingresses(objs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        return {o["metadata"]["name"]: o for o in objs if o["kind"] == "Ingress"}
+
+    def paths(o: dict[str, Any]) -> list[str]:
+        return [p["path"] for p in o["spec"]["rules"][0]["http"]["paths"]]
+
+    aws = ingresses(aws_objects)
+    assert {name: paths(o) for name, o in aws.items()} == {
+        "api": ["/api"],
+        "google-gateway": ["/oauth/google/callback"],
+        "whatsapp-webhook": ["/whatsapp/webhook"],
+        "web": ["/"],
+    }
+    for name, o in aws.items():
+        annotations = o["metadata"]["annotations"]
+        assert o["spec"]["rules"][0]["host"] == "agent.efi-agent.dev", name
+        # HTTPS only, with a real certificate: no route on plain HTTP (it only redirects).
+        assert annotations["traefik.ingress.kubernetes.io/router.entrypoints"] == "websecure"
+        assert annotations["traefik.ingress.kubernetes.io/router.tls.certresolver"] == "letsencrypt"
+    # The api sees its own paths: /api is stripped before the request reaches it.
+    [strip] = [o for o in aws_objects if o["kind"] == "Middleware"]
+    assert strip["spec"] == {"stripPrefix": {"prefixes": ["/api"]}}
+    assert aws["api"]["metadata"]["annotations"][
+        "traefik.ingress.kubernetes.io/router.middlewares"
+    ].endswith("-strip-api@kubernetescrd")
+    # k3d is unchanged: no host, one local port per service, no web pod.
+    k3d = ingresses(objects)
+    assert set(k3d) == {"api", "google-gateway", "whatsapp-webhook"}
+    assert all("host" not in o["spec"]["rules"][0] for o in k3d.values())
+    assert not any(o["kind"] == "Middleware" for o in objects)
+
+
+@needs_helm
+def test_t21_the_web_pod_is_hardened_and_reaches_nothing(aws_objects: list[dict[str, Any]]) -> None:
+    template = pod_templates(aws_objects)["web"]
+    spec = template["spec"]
+    [container] = spec["containers"]
+    assert spec["automountServiceAccountToken"] is False
+    assert spec["securityContext"]["runAsNonRoot"] is True
+    assert container["securityContext"] == {
+        "allowPrivilegeEscalation": False,
+        "readOnlyRootFilesystem": True,
+        "capabilities": {"drop": ["ALL"]},
+    }
+    # Static files only: no Secret, no environment, and no label that opens an egress path.
+    assert "envFrom" not in container and "env" not in container
+    labels = template["metadata"]["labels"]
+    assert not any(key.startswith("scheduling-agent/") for key in labels)
+    [policy] = [o for o in aws_objects if o["metadata"]["name"] == "ingress-web"]
+    [rule] = policy["spec"]["ingress"]
+    assert rule["ports"] == [{"protocol": "TCP", "port": 8080}]
+    assert rule["from"][0]["podSelector"] == {"matchLabels": {"app.kubernetes.io/name": "traefik"}}
+
+
+def test_the_cloud_traefik_redirects_to_https_and_keeps_its_certificates() -> None:
+    config = yaml.safe_load((ROOT / "deploy/cluster/traefik-aws/helmchartconfig.yaml").read_text())
+    values = yaml.safe_load(config["spec"]["valuesContent"])
+    redirect = values["ports"]["web"]["http"]["redirections"]["entryPoint"]
+    assert redirect == {"to": "websecure", "scheme": "https", "permanent": True}
+    acme = values["certificatesResolvers"]["letsencrypt"]["acme"]
+    # On the persistent volume, so a restart does not ask Let's Encrypt again.
+    assert values["persistence"]["enabled"] is True
+    assert acme["storage"].startswith(values["persistence"].get("path", "/data"))

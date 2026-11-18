@@ -43,6 +43,10 @@ resource "aws_s3_bucket_versioning" "state" {
   }
 }
 
+# Trivy wants a customer managed KMS key (AWS-0132). Accepted for now: a key costs about $1 a
+# month plus requests, and the bucket is already private, TLS only and reachable by this
+# account's roles alone. Revisit if state ever holds secrets of other users (ADR-023).
+#trivy:ignore:AWS-0132
 resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
   bucket = aws_s3_bucket.state.id
   rule {

@@ -1,0 +1,27 @@
+# The cloud server's values (ADR-023), applied after environments/k3d/values.yaml, which
+# carries the image digests. Only what differs from k3d is here; secrets are sealed in
+# deploy/cluster/secrets/aws with this cluster's own key.
+
+# One 4 GiB server runs everything (ADR-023). Every Python process uses about 80Mi but
+# reserves 192-256Mi, which adds up to more than the server has; reserve 128Mi each instead.
+memoryRequest: 128Mi
+
+# Public addresses. Not secret, so here rather than in the sealed Secrets; a value set here
+# wins over the same key in a Secret (env before envFrom).
+workloads:
+  api:
+    env:
+      WEB_APP_URL: https://agent.efi-agent.dev/
+      GOOGLE_LOGIN_REDIRECT_URI: https://agent.efi-agent.dev/auth/google/callback
+  notifier:
+    env:
+      WEB_APP_URL: https://agent.efi-agent.dev/
+  google-gateway:
+    env:
+      GOOGLE_CONNECT_REDIRECT_URI: https://agent.efi-agent.dev/oauth/google/callback
+
+cronJobs:
+  # Off until the data moves here from k3d (step 6.5): two clusters polling the same demo
+  # mailbox would each answer the same email.
+  gmail-poll:
+    suspend: true

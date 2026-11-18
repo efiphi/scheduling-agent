@@ -137,7 +137,7 @@ containers:
       periodSeconds: 30
     {{- end }}
     resources:
-      requests: {cpu: {{ $w.resources.cpu }}, memory: {{ $w.resources.memory }}}
+      requests: {cpu: {{ $w.resources.cpu }}, memory: {{ $root.Values.memoryRequest | default $w.resources.memory }}}
       limits: {memory: {{ $w.resources.memory }}}
     volumeMounts:
       - {name: tmp, mountPath: /tmp}

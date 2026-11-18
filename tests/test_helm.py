@@ -123,7 +123,10 @@ def test_no_secret_values_in_the_chart(objects: list[dict[str, Any]]) -> None:
 
 # --- Sealed Secrets (ADR-008) --------------------------------------------------------------
 
-SEALED = ROOT / "deploy/cluster/secrets/k3d"
+# One folder per cluster (k3d, aws), each sealed with that cluster's own key.
+SEALED = ROOT / "deploy/cluster/secrets"
+ENVIRONMENTS = sorted(p.name for p in SEALED.iterdir() if p.is_dir())
+per_env = pytest.mark.parametrize("env", ENVIRONMENTS)
 
 # The only keys each component's Secret may hold: the same split as Compose. A key added
 # to the wrong Secret (say, a Google key in the agent's) fails here, before any cluster.
@@ -163,13 +166,14 @@ ALLOWED_KEYS = {
 }
 
 
-def sealed() -> dict[str, dict[str, Any]]:
-    docs = [yaml.safe_load(p.read_text()) for p in sorted(SEALED.glob("*.yaml"))]
+def sealed(env: str) -> dict[str, dict[str, Any]]:
+    docs = [yaml.safe_load(p.read_text()) for p in sorted((SEALED / env).glob("*.yaml"))]
     return {d["metadata"]["name"]: d for d in docs}
 
 
-def test_t17_committed_secrets_are_sealed_never_plain() -> None:
-    for name, doc in sealed().items():
+@per_env
+def test_t17_committed_secrets_are_sealed_never_plain(env: str) -> None:
+    for name, doc in sealed(env).items():
         assert doc["kind"] == "SealedSecret", name
         assert "data" not in doc and "stringData" not in doc, name
         # Strict scope: bound to its own name and namespace (no scope annotations).
@@ -178,8 +182,9 @@ def test_t17_committed_secrets_are_sealed_never_plain() -> None:
         assert doc["metadata"]["namespace"] == "scheduling-agent", name
 
 
-def test_t13_invariant_1_each_sealed_secret_holds_only_its_components_keys() -> None:
-    docs = sealed()
+@per_env
+def test_t13_invariant_1_each_sealed_secret_holds_only_its_components_keys(env: str) -> None:
+    docs = sealed(env)
     assert set(docs) == set(ALLOWED_KEYS)
     for name, doc in docs.items():
         assert set(doc["spec"]["encryptedData"]) <= ALLOWED_KEYS[name], name
@@ -190,9 +195,10 @@ def test_t13_invariant_1_each_sealed_secret_holds_only_its_components_keys() -> 
 
 
 @needs_helm
-def test_every_secret_the_chart_reads_is_sealed(objects: list[dict[str, Any]]) -> None:
+@per_env
+def test_every_secret_the_chart_reads_is_sealed(objects: list[dict[str, Any]], env: str) -> None:
     used = set().union(*(secrets_of(spec) for spec in pod_specs(objects).values()))
-    assert used == set(sealed())
+    assert used == set(sealed(env))
 
 
 # --- NetworkPolicies (T21, ADR-011) --------------------------------------------------------
@@ -346,10 +352,17 @@ def observability_manifests() -> list[dict[str, Any]]:
     ]
 
 
-def test_t17_grafanas_login_is_sealed_never_plain() -> None:
-    kinds = {doc["metadata"]["name"]: doc["kind"] for doc in observability_manifests()}
-    assert kinds["grafana-admin"] == "SealedSecret"
-    assert "Secret" not in kinds.values()
+@per_env
+def test_t17_monitoring_secrets_are_sealed_per_cluster_never_plain(env: str) -> None:
+    # Not in the shared manifests: each cluster's key opens only its own copy.
+    assert "Secret" not in {doc["kind"] for doc in observability_manifests()}
+    paths = sorted((SEALED / env / "observability").glob("*.yaml"))
+    docs = {d["metadata"]["name"]: d for d in (yaml.safe_load(p.read_text()) for p in paths)}
+    assert set(docs) == {"grafana-admin", "alert-relay-token"}
+    for name, doc in docs.items():
+        assert (doc["kind"], doc["metadata"]["namespace"]) == ("SealedSecret", "observability"), (
+            name
+        )
 
 
 def test_t21_the_monitoring_tools_deny_ingress_by_default() -> None:
@@ -436,6 +449,9 @@ def test_alert_rules_are_unique_explained_and_watch_for_silence() -> None:
     assert all(rule["annotations"]["summary"] for rule in rules.values())
     # E13: if polling stops reporting at all, that is the failure itself, not "no data".
     assert rules["sa-poll-stale"]["noDataState"] == "Alerting"
+    # A job suspended on purpose is not stale (ADR-023), but only through this factor.
+    [query] = [d for d in rules["sa-poll-stale"]["data"] if d["refId"] == "A"]
+    assert "(1 - kube_cronjob_spec_suspend{" in query["model"]["expr"]
 
 
 @needs_helm
@@ -451,3 +467,101 @@ def test_t9_only_alertmanager_can_reach_the_alert_relay(objects: list[dict[str, 
     ]
     assert rule["ports"] == [{"protocol": "TCP", "port": 8003}]
     assert not any(o["kind"] == "Ingress" and "alert-relay" in str(o["spec"]) for o in objects)
+
+
+# --- The cloud environment (ADR-023) -------------------------------------------------------
+
+ENVIRONMENT_VALUES = ROOT / "deploy/cluster/environments"
+
+
+@pytest.fixture(scope="module")
+def aws_objects() -> list[dict[str, Any]]:
+    """The chart as Argo CD renders it on the cloud server: k3d's digests, then aws on top."""
+    assert HELM is not None
+    out = subprocess.run(  # noqa: S603 - a fixed command, no user input
+        [
+            HELM,
+            "template",
+            "test",
+            str(CHART),
+            "-f",
+            str(ENVIRONMENT_VALUES / "k3d/values.yaml"),
+            "-f",
+            str(ENVIRONMENT_VALUES / "aws/values.yaml"),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return [doc for doc in yaml.safe_load_all(out) if doc]
+
+
+@needs_helm
+def test_the_cloud_does_not_poll_the_mailbox_k3d_still_polls(
+    objects: list[dict[str, Any]], aws_objects: list[dict[str, Any]]
+) -> None:
+    # Two clusters on one demo mailbox would each answer the same email (until step 6.5).
+    def poll(objs: list[dict[str, Any]]) -> dict[str, Any]:
+        [job] = [
+            o for o in objs if o["kind"] == "CronJob" and o["metadata"]["name"] == "gmail-poll"
+        ]
+        return job["spec"]
+
+    assert poll(aws_objects)["suspend"] is True
+    assert poll(objects)["suspend"] is False
+
+
+@needs_helm
+def test_the_cloud_reserves_less_memory_but_keeps_every_limit(
+    objects: list[dict[str, Any]], aws_objects: list[dict[str, Any]]
+) -> None:
+    def resources(objs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        return {
+            name: spec["containers"][0]["resources"]
+            for name, spec in pod_specs(objs).items()
+            # Fixed reservations of their own; the migrations Job's name carries the image hash.
+            if name not in {"postgres", "redis"} and not name.startswith("migrations-")
+        }
+
+    k3d, aws = resources(objects), resources(aws_objects)
+    assert set(k3d) == set(aws)
+    for name in k3d:
+        assert aws[name]["limits"] == k3d[name]["limits"], name
+        assert aws[name]["requests"]["memory"] == "128Mi", name
+        assert k3d[name]["requests"]["memory"] == k3d[name]["limits"]["memory"], name
+
+
+@needs_helm
+def test_the_cloud_uses_its_public_address(aws_objects: list[dict[str, Any]]) -> None:
+    def env(name: str) -> dict[str, str]:
+        [container] = pod_specs(aws_objects)[name]["containers"]
+        return {e["name"]: e.get("value") for e in container["env"]}
+
+    base = "https://agent.efi-agent.dev"
+    assert env("api")["WEB_APP_URL"] == f"{base}/"
+    assert env("api")["GOOGLE_LOGIN_REDIRECT_URI"] == f"{base}/auth/google/callback"
+    assert env("notifier")["WEB_APP_URL"] == f"{base}/"
+    assert env("google-gateway")["GOOGLE_CONNECT_REDIRECT_URI"] == f"{base}/oauth/google/callback"
+
+
+def test_the_cloud_root_takes_shared_apps_only_never_k3ds() -> None:
+    root = yaml.safe_load((ROOT / "deploy/cluster/argocd/root-aws.yaml").read_text())
+    shared, own = root["spec"]["sources"]
+    include = shared["directory"]["include"].strip("{}").split(",")
+    apps = ROOT / shared["path"]
+    assert all((apps / name).is_file() for name in include)
+    # k3d's sealed Secrets cannot be opened on the cloud, and its Traefik ports do not exist there.
+    assert not any(name.startswith(("secrets-", "traefik")) for name in include)
+    assert "scheduling-agent.yaml" not in include
+    own_apps = {p.name for p in (ROOT / own["path"]).glob("*.yaml")}
+    assert own_apps == {
+        "scheduling-agent.yaml",
+        "secrets-aws.yaml",
+        "secrets-aws-observability.yaml",
+    }
+    # The same Application names as k3d, so the two clusters read alike.
+    names = {
+        yaml.safe_load(p.read_text())["metadata"]["name"]
+        for p in (ROOT / own["path"]).glob("*.yaml")
+    }
+    assert names == {"scheduling-agent", "secrets-aws", "secrets-aws-observability"}

@@ -87,7 +87,9 @@ alerting:
             to: 0
           model:
             refId: A
-            expr: time() - kube_cronjob_status_last_successful_time{namespace="scheduling-agent", cronjob="gmail-poll"}
+            # Times (1 - suspended): a job switched off on purpose reads 0, not stale (the
+            # cloud cluster until its data moves, ADR-023). Missing metrics still alert.
+            expr: (time() - kube_cronjob_status_last_successful_time{namespace="scheduling-agent", cronjob="gmail-poll"}) * on(namespace, cronjob) (1 - kube_cronjob_spec_suspend{namespace="scheduling-agent", cronjob="gmail-poll"})
             instant: true
         - refId: B
           datasourceUid: __expr__

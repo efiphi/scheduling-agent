@@ -10,6 +10,6 @@ useDefault = true
 [[allowlists]]
 description = "Sealed Secrets ciphertext"
 condition = "AND"
-paths = ['''^deploy/cluster/(secrets/[^/]+|observability/manifests)/[^/]+\.yaml$''']
+paths = ['''^deploy/cluster/secrets/[^/]+(/observability)?/[^/]+\.yaml$''']
 regexTarget = "line"
 regexes = ['''^\s+[A-Za-z][A-Za-z0-9_-]*: Ag[A-Za-z0-9+/]{300,}={0,2}$''']

@@ -1,0 +1,25 @@
+# The application on the cloud server (ADR-023). The same environment branch as k3d, so the
+# same tested images (ADR-021), with the cloud's own values on top: its public address, and
+# whatever must not run twice while both clusters are up.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: scheduling-agent
+  namespace: argocd
+spec:
+  project: scheduling-agent
+  source:
+    repoURL: https://github.com/efiphi/scheduling-agent.git
+    targetRevision: deploy/k3d
+    path: deploy/helm/scheduling-agent
+    helm:
+      releaseName: scheduling-agent
+      valueFiles:
+        - ../../cluster/environments/k3d/values.yaml   # the image digests
+        - ../../cluster/environments/aws/values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: scheduling-agent
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true]

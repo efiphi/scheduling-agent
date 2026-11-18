@@ -19,6 +19,9 @@ metadata:
     app.kubernetes.io/name: {{ $name }}
 spec:
   schedule: {{ $c.schedule | quote }}
+  # An environment can switch a job off, e.g. a second cluster that must not poll the same
+  # mailbox as the first (deploy/cluster/environments/aws/values.yaml).
+  suspend: {{ $c.suspend | default false }}
   timeZone: {{ $.Values.timeZone | quote }}
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: {{ $c.startingDeadlineSeconds | default 60 }}

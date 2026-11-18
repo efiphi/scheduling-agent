@@ -30,8 +30,10 @@ resource "cloudflare_dns_record" "agent" {
   comment = "scheduling-agent cloud server (infra/terraform/dns)"
 }
 
-# Only Let's Encrypt may issue certificates for this domain: a certificate authority asked
-# by anyone else for a certificate here must refuse (CAA, RFC 8659).
+# Which certificate authorities may issue for this domain (CAA, RFC 8659): any other must
+# refuse. Cloudflare adds its own authorities next to this one while the zone's Universal SSL
+# is on (it is, by default, though unused: the record is not proxied); turning that off in
+# the zone leaves Let's Encrypt alone.
 resource "cloudflare_dns_record" "caa" {
   zone_id = data.cloudflare_zone.main.zone_id
   name    = var.zone

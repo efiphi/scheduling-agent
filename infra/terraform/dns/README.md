@@ -1,8 +1,8 @@
 # DNS (step 6.4)
 
 The cloud server's public name, `agent.efi-agent.dev`, as an A record on the server's
-Elastic IP (read from the cloud stack's state), and a CAA record so that only Let's Encrypt
-may issue certificates for the domain. Not proxied through Cloudflare: Traefik on the server
+Elastic IP (read from the cloud stack's state), and a CAA record naming Let's Encrypt as the
+certificate authority (Cloudflare adds its own while the zone's Universal SSL is on). Not proxied through Cloudflare: Traefik on the server
 ends TLS itself.
 
 ```bash

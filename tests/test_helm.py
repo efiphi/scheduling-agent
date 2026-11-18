@@ -532,7 +532,7 @@ def test_the_cloud_relay_waits_for_the_data_k3d_keeps_one(
 
 
 @needs_helm
-def test_the_cloud_reserves_less_memory_but_keeps_every_limit(
+def test_the_cloud_reserves_less_memory_and_cpu_but_keeps_every_limit(
     objects: list[dict[str, Any]], aws_objects: list[dict[str, Any]]
 ) -> None:
     def resources(objs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -548,6 +548,8 @@ def test_the_cloud_reserves_less_memory_but_keeps_every_limit(
     for name in k3d:
         assert aws[name]["limits"] == k3d[name]["limits"], name
         assert aws[name]["requests"]["memory"] == "128Mi", name
+        assert aws[name]["requests"]["cpu"] == "10m", name
+        assert "cpu" not in aws[name]["limits"], name
         assert k3d[name]["requests"]["memory"] == k3d[name]["limits"]["memory"], name
 
 

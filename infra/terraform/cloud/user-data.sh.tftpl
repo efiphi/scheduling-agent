@@ -39,13 +39,17 @@ mkdir -p /var/lib/rancher
 mount "$device" /var/lib/rancher
 echo "LABEL=sa-data /var/lib/rancher ext4 defaults,nofail 0 2" >> /etc/fstab
 
-# A little swap, so a memory spike slows the server down instead of killing a pod.
+# A little swap, so a memory spike slows the server down instead of killing a pod. Used
+# only when memory is nearly gone (swappiness 10), and never for k3s itself (MemorySwapMax
+# below): a swapped-out API server made the whole cluster stall on the first deploy.
 if [ ! -f /swapfile ]; then
   dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
   chmod 600 /swapfile
   mkswap /swapfile
 fi
 swapon /swapfile
+echo "vm.swappiness = 10" > /etc/sysctl.d/90-scheduling-agent.conf
+sysctl -q --system
 
 # 3. k3s, pinned and verified. No install script piped into a shell.
 curl -fsSL -o /usr/local/bin/k3s \
@@ -69,6 +73,7 @@ ExecStart=/usr/local/bin/k3s server \
   --secrets-encryption
 KillMode=process
 Delegate=yes
+MemorySwapMax=0
 LimitNOFILE=1048576
 LimitNPROC=infinity
 TasksMax=infinity

@@ -17,6 +17,11 @@ metadata:
 spec:
   # An environment can scale a process to 0 (hasKey, because `default` would turn 0 into 1).
   replicas: {{ ternary $w.replicas 1 (hasKey $w "replicas") }}
+  {{- with $.Values.rollingUpdate }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {{ toJson . }}
+  {{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ $name }}

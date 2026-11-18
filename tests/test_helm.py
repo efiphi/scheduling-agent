@@ -662,3 +662,20 @@ def test_the_cloud_traefik_redirects_to_https_and_keeps_its_certificates() -> No
     # On the persistent volume, so a restart does not ask Let's Encrypt again.
     assert values["persistence"]["enabled"] is True
     assert acme["storage"].startswith(values["persistence"].get("path", "/data"))
+
+
+def mebibytes(quantity: str) -> float:
+    units = {"Ki": 1 / 1024, "Mi": 1, "Gi": 1024}
+    return float(quantity[:-2]) * units[quantity[-2:]]
+
+
+@needs_helm
+def test_no_pod_reserves_more_memory_than_its_limit(
+    objects: list[dict[str, Any]], aws_objects: list[dict[str, Any]]
+) -> None:
+    # Kubernetes refuses such a pod outright (seen with the web pod on the cloud, 6.4).
+    for objs in (objects, aws_objects):
+        for name, spec in pod_specs(objs).items():
+            for c in spec["containers"] + spec.get("initContainers", []):
+                r = c["resources"]
+                assert mebibytes(r["requests"]["memory"]) <= mebibytes(r["limits"]["memory"]), name

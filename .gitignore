@@ -187,3 +187,12 @@ cython_debug/
 # Node
 node_modules/
 *.tsbuildinfo
+
+# Terraform: local state and plans can hold secrets; providers are downloaded per machine.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
+crash.log
+*_override.tf

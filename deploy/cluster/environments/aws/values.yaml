@@ -5,6 +5,9 @@
 # One 4 GiB server runs everything (ADR-023). Every Python process uses about 80Mi but
 # reserves 192-256Mi, which adds up to more than the server has; reserve 128Mi each instead.
 memoryRequest: 128Mi
+# One core in all, and k3d's reservations (50-100m each) fill it before every pod is placed.
+# The processes use a few millicores each when idle (measured 18.11: 86m for the whole node).
+cpuRequest: 10m
 # And never two copies at once: a new image rolled out to every process together would
 # otherwise double their memory for a while (seen on the first deploy). A process is down
 # for the few seconds its replacement takes to start.

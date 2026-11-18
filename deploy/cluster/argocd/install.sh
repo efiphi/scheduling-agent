@@ -32,6 +32,10 @@ fi
 kubectl get namespace argocd >/dev/null 2>&1 || kubectl create namespace argocd >/dev/null
 # Server-side apply: Argo CD's CRDs are too large for the annotation client-side apply keeps.
 kubectl apply --server-side --force-conflicts -n argocd -f "$workdir/install.yaml" >/dev/null
+# Three parts this setup never uses, off to save ~150Mi: single sign-on (Dex; only the admin
+# login, through a port-forward), notifications, and ApplicationSets (none defined).
+kubectl -n argocd scale deploy argocd-dex-server argocd-notifications-controller \
+  argocd-applicationset-controller --replicas=0 >/dev/null
 kubectl -n argocd rollout status deploy/argocd-server --timeout=300s
 kubectl -n argocd rollout status deploy/argocd-repo-server --timeout=300s
 kubectl -n argocd rollout status statefulset/argocd-application-controller --timeout=300s

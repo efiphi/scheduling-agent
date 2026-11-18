@@ -116,6 +116,13 @@ resource "aws_launch_template" "server" {
     http_put_response_hop_limit = 1
   }
 
+  # A t4g runs at 20% of each core and spends credits above that. "unlimited" (the default
+  # for t4g) bills the extra when credits run out; "standard" slows the server down instead,
+  # so a busy hour can never raise the bill. Non-burstable fallback types ignore this.
+  credit_specification {
+    cpu_credits = "standard"
+  }
+
   block_device_mappings {
     device_name = "/dev/xvda"
     ebs {

@@ -21,6 +21,10 @@ pullPolicy: IfNotPresent
 # then evicts whichever pod is furthest over its reservation.
 memoryRequest: ""
 
+# Empty: Kubernetes' default, a new pod starts before the old one stops (no gap). On a server
+# with no memory to spare, {maxSurge: 0, maxUnavailable: 1} stops the old one first instead.
+rollingUpdate: {}
+
 # One entry per process. The deployment template turns each into a Deployment (and a
 # Service when `port` is set). `secret` names the only Secret the process may read.
 # `internet` lets it open HTTPS connections outside the cluster (networkpolicies.yaml):

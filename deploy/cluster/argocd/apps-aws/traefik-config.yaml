@@ -1,0 +1,17 @@
+# The cloud's Traefik settings: HTTPS with Let's Encrypt (deploy/cluster/traefik-aws/).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: traefik-config
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/efiphi/scheduling-agent.git
+    targetRevision: main
+    path: deploy/cluster/traefik-aws
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}

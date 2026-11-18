@@ -28,7 +28,7 @@ This table says what is checked. Whether it passes is reported by CI.
 | T18 | הרשאות עודפות | 3 |  |  |
 | T19 | Stored XSS באפליקציה הוובית | 4 |  |  |
 | T20 | שרשרת אספקה | 4 |  |  |
-| T21 | הגדרות Kubernetes חלשות | 5 |  |  |
+| T21 | הגדרות Kubernetes חלשות | 6 |  |  |
 | T22 | דליפת מידע דרך לוגים ומעקב | 11 |  |  |
 | T23 | חשיפה לספק מודל השפה | 1 |  |  |
 | T24 | הצפת מיילים (denial of wallet) | 9 |  |  |

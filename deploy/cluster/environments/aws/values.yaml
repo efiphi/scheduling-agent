@@ -13,13 +13,19 @@ cpuRequest: 10m
 # for the few seconds its replacement takes to start.
 rollingUpdate: {maxSurge: 0, maxUnavailable: 1}
 
+# The public address: one host, HTTPS only, the web app at / and the api under /api.
+publicHost: agent.efi-agent.dev
+web:
+  enabled: true
+
 # Public addresses. Not secret, so here rather than in the sealed Secrets; a value set here
 # wins over the same key in a Secret (env before envFrom).
 workloads:
   api:
     env:
       WEB_APP_URL: https://agent.efi-agent.dev/
-      GOOGLE_LOGIN_REDIRECT_URI: https://agent.efi-agent.dev/auth/google/callback
+      # Under /api, like everything the api serves on this host.
+      GOOGLE_LOGIN_REDIRECT_URI: https://agent.efi-agent.dev/api/auth/google/callback
   notifier:
     env:
       WEB_APP_URL: https://agent.efi-agent.dev/

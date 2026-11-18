@@ -36,12 +36,14 @@ jobs:
       fail-fast: true
       matrix:
         arch: [amd64, arm64]
-        image: [api, gateway, agent, migrations]
+        image: [api, gateway, agent, migrations, web]
         include:
-          - {image: api, dockerfile: services/api/Dockerfile}
-          - {image: gateway, dockerfile: services/google_gateway/Dockerfile}
-          - {image: agent, dockerfile: services/agent/Dockerfile}
-          - {image: migrations, dockerfile: packages/db/Dockerfile}
+          - {image: api, dockerfile: services/api/Dockerfile, context: .}
+          - {image: gateway, dockerfile: services/google_gateway/Dockerfile, context: .}
+          - {image: agent, dockerfile: services/agent/Dockerfile, context: .}
+          - {image: migrations, dockerfile: packages/db/Dockerfile, context: .}
+          # The web app builds from its own folder (web/Dockerfile), not the uv workspace.
+          - {image: web, dockerfile: web/Dockerfile, context: web}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -62,7 +64,7 @@ jobs:
           docker build -f "${{ matrix.dockerfile }}" --platform "linux/${{ matrix.arch }}" \
             --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
             --label "org.opencontainers.image.revision=${SHA}" \
-            -t "$ref" .
+            -t "$ref" "${{ matrix.context }}"
           docker push "$ref"
 
   publish:
@@ -77,6 +79,7 @@ jobs:
       gateway: ${{ steps.merge.outputs.gateway }}
       agent: ${{ steps.merge.outputs.agent }}
       migrations: ${{ steps.merge.outputs.migrations }}
+      web: ${{ steps.merge.outputs.web }}
     steps:
       - name: Log in to GHCR
         env:
@@ -88,7 +91,7 @@ jobs:
       - name: Merge architectures
         id: merge
         run: |
-          for image in api gateway agent migrations; do
+          for image in api gateway agent migrations web; do
             repo="${REGISTRY}/scheduling-agent-${image}"
             docker buildx imagetools create -t "${repo}:sha-${SHA}" \
               "${repo}:sha-${SHA}-amd64" "${repo}:sha-${SHA}-arm64"
@@ -125,6 +128,7 @@ jobs:
           GATEWAY: ${{ needs.publish.outputs.gateway }}
           AGENT: ${{ needs.publish.outputs.agent }}
           MIGRATIONS: ${{ needs.publish.outputs.migrations }}
+          WEB: ${{ needs.publish.outputs.web }}
         run: |
           file=deploy/cluster/environments/k3d/values.yaml
           sed -i -E \
@@ -132,7 +136,10 @@ jobs:
             -e "s|^(  gateway: ).*|\1${GATEWAY}|" \
             -e "s|^(  agent: ).*|\1${AGENT}|" \
             -e "s|^(  migrations: ).*|\1${MIGRATIONS}|" \
+            -e "s|^(  web: ).*|\1${WEB}|" \
             "$file"
+          # A line main added (web, 6.4) may not survive the merge's -X ours; add it then.
+          grep -q '^  web: ' "$file" || sed -i -E "s|^(  migrations: .*)|\1\n  web: ${WEB}|" "$file"
           git diff --stat
           if ! git diff --quiet; then git commit -am "Deploy ${SHA::7} to k3d"; fi
           # Pushes made with GITHUB_TOKEN do not start new workflow runs, so this cannot loop.

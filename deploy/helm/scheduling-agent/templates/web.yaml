@@ -1,0 +1,104 @@
+{{- /*
+The web app as static files (web/Dockerfile), for an environment with a public address
+(ADR-023). On k3d the web app runs from Vite's dev server instead, so this is off there.
+
+It holds no secret, talks to nothing (no egress beyond DNS: the browser calls /api, which
+Traefik sends to the api service), and only Traefik may reach it (T21).
+*/ -}}
+{{- if .Values.web.enabled }}
+{{- $args := dict "root" $ "name" "web" }}
+---
+{{ include "sa.serviceAccount" $args }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    {{- include "sa.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: web
+spec:
+  replicas: 1
+  {{- with $.Values.rollingUpdate }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {{ toJson . }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  template:
+    metadata:
+      labels:
+        {{- include "sa.labels" $ | nindent 8 }}
+        app.kubernetes.io/name: web
+        app.kubernetes.io/component: web
+    spec:
+      serviceAccountName: web
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        {{- include "sa.podSecurity" $ | nindent 8 }}
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: web
+          image: {{ .Values.images.web | quote }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          securityContext:
+            {{- include "sa.containerSecurity" $ | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: {{ .Values.cpuRequest | default .Values.web.resources.cpu }}
+              memory: {{ .Values.memoryRequest | default .Values.web.resources.memory }}
+            limits: {memory: {{ .Values.web.resources.memory }}}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 16Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels:
+    {{- include "sa.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: web
+spec:
+  selector:
+    app.kubernetes.io/name: web
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ingress-web
+  labels:
+    {{- include "sa.labels" $ | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: web}
+  policyTypes: [Ingress]
+  ingress:
+    # Only the cluster's ingress controller, like every other HTTP service.
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {app.kubernetes.io/name: traefik}
+      ports:
+        - {protocol: TCP, port: 8080}
+{{- end }}

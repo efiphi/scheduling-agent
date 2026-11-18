@@ -83,12 +83,19 @@ jobs:
         if: steps.changes.outputs.relevant == 'true'
         env:
           TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
+          # Optional: a Cloudflare token that can only read the zone. Without it the dns stack
+          # is still checked (fmt, Trivy, validate), just not planned.
+          TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_READ_TOKEN }}
           TF_IN_AUTOMATION: "1"
         run: |
           for stack in infra/terraform/*/; do
             echo "## $stack" >> "$GITHUB_STEP_SUMMARY"
             terraform -chdir="$stack" init -input=false -lockfile=readonly
             terraform -chdir="$stack" validate
+            if [[ "$stack" == */dns/ && -z "$TF_VAR_cloudflare_api_token" ]]; then
+              echo "No CLOUDFLARE_READ_TOKEN secret: dns plan skipped." | tee -a "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
             terraform -chdir="$stack" plan -input=false -lock=false -no-color | tee plan.txt
             grep -E '^(Plan:|No changes)' plan.txt >> "$GITHUB_STEP_SUMMARY" || true
           done

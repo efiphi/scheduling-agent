@@ -58,6 +58,9 @@ dashboardsConfigMaps:
 # Layer 5; these are about the system working. noDataState: a missing poll metric alerts,
 # since silence there is itself the failure (E13).
 alerting:
+  # execErrState KeepLast: when a query fails (Loki or Prometheus still starting after the
+  # cluster comes up), the rule keeps its last state instead of raising a "DatasourceError"
+  # alert to WhatsApp. A store that stays down is caught by Prometheus's watchdog rules.
   rules.yaml:
     apiVersion: 1
     groups:
@@ -71,7 +74,7 @@ alerting:
         condition: B
         for: 5m
         noDataState: Alerting
-        execErrState: Error
+        execErrState: KeepLast
         annotations:
           summary: 'No successful gmail-poll run for over 10 minutes: new email is not reaching the agent.'
           # The fixed text the owner's WhatsApp shows (alert relay, ADR-022).
@@ -102,7 +105,7 @@ alerting:
         condition: B
         for: 0m
         noDataState: OK
-        execErrState: Error
+        execErrState: KeepLast
         annotations:
           summary: A pod restarted more than twice in 15 minutes (the agent once restarted 91 times unnoticed).
           # The fixed text the owner's WhatsApp shows (alert relay, ADR-022).
@@ -133,7 +136,7 @@ alerting:
         condition: B
         for: 10m
         noDataState: OK
-        execErrState: Error
+        execErrState: KeepLast
         annotations:
           summary: 'More than 20 messages waiting on a stream for 10 minutes: its consumer is stuck or down.'
           # The fixed text the owner's WhatsApp shows (alert relay, ADR-022).
@@ -164,7 +167,7 @@ alerting:
         condition: B
         for: 0m
         noDataState: OK
-        execErrState: Error
+        execErrState: KeepLast
         annotations:
           summary: Over 80% of today's model budget is spent; at 100% the agent pauses until tomorrow.
           # The fixed text the owner's WhatsApp shows (alert relay, ADR-022).
@@ -195,7 +198,7 @@ alerting:
         condition: B
         for: 0m
         noDataState: OK
-        execErrState: Error
+        execErrState: KeepLast
         annotations:
           summary: An action you approved was not carried out; the agent asked you about it in the app.
           # The fixed text the owner's WhatsApp shows (alert relay, ADR-022).
@@ -226,7 +229,7 @@ alerting:
         condition: B
         for: 0m
         noDataState: OK
-        execErrState: Error
+        execErrState: KeepLast
         annotations:
           summary: More than 5 error lines in 10 minutes from one service.
           # The fixed text the owner's WhatsApp shows (alert relay, ADR-022).

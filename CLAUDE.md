@@ -69,7 +69,7 @@ Work strictly in the layers defined in `docs/03-architecture.md`. Do not jump ah
 - **Layer 2 — Kubernetes + GitOps:** k3d, Helm chart, Sealed Secrets, NetworkPolicies, Argo CD + GHCR, CronJobs, CI gates. *(done, 31.10)*
 - **Layer 3 — observability:** live demo on the cluster, OpenTelemetry traces (one per email), agent run tracing, JSON logs, metrics, Grafana dashboards and alerts as code (ADR-018). *(done, 1.11)*
 - **Layer 4 — evals + red team in CI:** real-model evals and attacks with three repeats, OWASP ZAP passive scan, generated threat coverage table (ADR-020). *(done, 3.11)*
-- **Layer 5 — detection:** image digests on their own branch so main is protected (ADR-021); security events as metrics; detection rules as code with promtool tests; a watchdog for the monitoring stack; Alertmanager to WhatsApp through an alert-relay pod (ADR-022). *(done, 18.11; the last hop to the phone waits on Meta approving the `system_alert` template)*
+- **Layer 5 — detection:** image digests on their own branch so main is protected (ADR-021); security events as metrics; detection rules as code with promtool tests; a watchdog for the monitoring stack; Alertmanager to WhatsApp through an alert-relay pod (ADR-022). *(done, 18.11; alerts verified on the phone 18.11)*
 - **Layer 6:** temporary cloud (also a stable webhook URL and Falco, deferred from Layer 5).
 
 ## Conventions

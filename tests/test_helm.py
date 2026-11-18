@@ -521,6 +521,11 @@ def test_the_cloud_relay_waits_for_the_data_k3d_keeps_one(
         }
 
     k3d, aws = replicas(objects), replicas(aws_objects)
+    # One server, no spare memory: a rollout stops the old pod before starting the new one.
+    for o in aws_objects:
+        if o["kind"] == "Deployment":
+            assert o["spec"]["strategy"]["rollingUpdate"] == {"maxSurge": 0, "maxUnavailable": 1}
+    assert not any("strategy" in o["spec"] for o in objects if o["kind"] == "Deployment")
     assert set(k3d.values()) == {1}
     assert aws.pop("alert-relay") == 0
     assert set(aws.values()) == {1}

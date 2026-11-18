@@ -5,6 +5,10 @@
 # One 4 GiB server runs everything (ADR-023). Every Python process uses about 80Mi but
 # reserves 192-256Mi, which adds up to more than the server has; reserve 128Mi each instead.
 memoryRequest: 128Mi
+# And never two copies at once: a new image rolled out to every process together would
+# otherwise double their memory for a while (seen on the first deploy). A process is down
+# for the few seconds its replacement takes to start.
+rollingUpdate: {maxSurge: 0, maxUnavailable: 1}
 
 # Public addresses. Not secret, so here rather than in the sealed Secrets; a value set here
 # wins over the same key in a Secret (env before envFrom).

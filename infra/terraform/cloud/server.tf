@@ -96,6 +96,7 @@ resource "aws_launch_template" "server" {
     eip_allocation = aws_eip.server.allocation_id
     k3s_version    = var.k3s_version
     k3s_sha256     = var.k3s_sha256
+    backup_bucket  = aws_s3_bucket.backups.bucket
   }))
 
   iam_instance_profile {

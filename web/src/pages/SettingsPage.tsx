@@ -50,7 +50,7 @@ export function SettingsPage() {
         </div>
       </Card>
 
-      <Link to="/settings/security" className="block rounded-xl border border-slate-200 bg-white p-4 font-semibold text-blue-700">
+      <Link to="/settings/security" className="block rounded-xl border border-line bg-surface p-4 font-semibold text-accent">
         אבטחה: השהיית הסוכן, קוד עצירה, חשבונות מחוברים ←
       </Link>
     </section>

@@ -10,7 +10,7 @@ export function SlotTime({ slot }: { slot: Slot }) {
         {formatDateTime(slot.start)}–{formatTime(slot.end)} שעון ישראל
       </span>
       {other && other !== USER_TIME_ZONE && (
-        <span className="block text-sm text-slate-600">
+        <span className="block text-sm text-muted">
           {formatDateTime(slot.start, other)}–{formatTime(slot.end, other)} <bdi>{other}</bdi>
         </span>
       )}

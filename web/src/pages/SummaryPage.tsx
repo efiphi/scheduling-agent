@@ -25,19 +25,19 @@ export function SummaryPage() {
           </Card>
 
           <Card title="מיילים שהסוכן דילג עליהם">
-            <p className="mb-2 text-sm text-slate-600">שולח, נושא וזמן בלבד, מ-7 הימים האחרונים.</p>
+            <p className="mb-2 text-sm text-muted">שולח, נושא וזמן בלבד, מ-7 הימים האחרונים.</p>
             {summary.skippedEmails.length === 0 ? (
               <Empty>הסוכן לא דילג על מיילים.</Empty>
             ) : (
               <ul className="space-y-2">
                 {summary.skippedEmails.map((m) => (
-                  <li key={m.id} className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2 last:border-b-0">
+                  <li key={m.id} className="flex items-center justify-between gap-2 border-b border-line-soft pb-2 last:border-b-0">
                     <div className="min-w-0">
                       {/* T19: sender and subject come from outside and stay plain text. */}
                       <p className="truncate" dir="auto">
                         {m.subject}
                       </p>
-                      <p className="text-sm text-slate-600">
+                      <p className="text-sm text-muted">
                         <bdi>{m.from}</bdi> · {formatDateTime(m.receivedAt)}
                       </p>
                     </div>
@@ -57,7 +57,7 @@ function Stat({ label, value }: { label: string; value: number }) {
   return (
     // Label first in the markup (valid <dl>), number shown on top.
     <div className="flex flex-col-reverse">
-      <dt className="text-xs text-slate-600">{label}</dt>
+      <dt className="text-xs text-muted">{label}</dt>
       <dd className="text-2xl font-bold">{value}</dd>
     </div>
   );

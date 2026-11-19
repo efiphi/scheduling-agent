@@ -3,4 +3,62 @@
 /*
  * RTL rule: use logical utilities only (ms-/me-/ps-/pe-/start-/end-, text-start),
  * never left/right, so the same markup works in both directions.
+ *
+ * The look (designed in Claude Design, 19.11): a warm light ground, white cards, one accent
+ * for the main action, and amber/red only where the owner must look (an unusual request, a
+ * new recipient). Every screen takes its colors from these tokens, never raw palette shades.
  */
+@theme {
+  --font-sans: "Heebo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+
+  --color-canvas: #f6f5f1;
+  --color-surface: #ffffff;
+  --color-sunken: #f6f5f1;
+  --color-ink: #17171c;
+  --color-ink-soft: #3b3b45;
+  --color-muted: #5e5e6a;
+  --color-line: #e7e5df;
+  --color-line-soft: #efede7;
+  --color-line-strong: #d9d7d0;
+
+  --color-accent: #2f3db8;
+  --color-accent-hover: #232e8f;
+  --color-accent-soft: #eceefc;
+  --color-accent-tint: #f4f5fd;
+
+  --color-warn-bg: #fff4de;
+  --color-warn-ink: #7a4300;
+  --color-warn-icon: #b26200;
+  --color-warn-line: #f0c97a;
+
+  --color-danger: #a11b1b;
+  --color-danger-bg: #fdf1f1;
+  --color-danger-line: #f3b8b8;
+
+  --color-ok: #1e6b34;
+  --color-ok-bg: #e6f4ea;
+  --color-ok-dot: #2e9a4f;
+
+  --radius-card: 1.25rem;
+  --shadow-card: 0 1px 2px rgb(23 23 28 / 0.04), 0 8px 24px rgb(23 23 28 / 0.05);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Keyboard focus is always visible, in the accent color. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  bdi {
+    unicode-bidi: isolate;
+  }
+}

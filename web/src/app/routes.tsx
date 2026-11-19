@@ -33,7 +33,7 @@ export function createRoutes(source: DataSource): RouteObject[] {
     element: <AppLayout />,
     // The layout loads the account so the status banners show on every screen.
     loader: () => source.getAccount(),
-    hydrateFallbackElement: <p className="p-4 text-slate-600">טוען…</p>,
+    hydrateFallbackElement: <p className="p-4 text-muted">טוען…</p>,
     children: [
       { path: "/", element: <QueuePage />, loader: () => source.listPendingActions() },
       {

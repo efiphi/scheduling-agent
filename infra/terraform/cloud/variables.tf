@@ -25,11 +25,14 @@ variable "instance_types" {
 
 variable "spot_max_price" {
   description = <<-EOT
-    The most an hour may cost, in USD: $0.03 is about $22 a month, about $28 with the disks
-    and the address. Above it AWS gives no server (the agent waits) rather than a bigger bill.
+    The most an hour may cost, in USD. Spot is billed at the market price, not at this cap;
+    when the market price rises above the cap, AWS takes the server back. $0.03 sat right
+    above the market (m6g $0.0277, m8g $0.0299 on 19.11), so small rises moved the server.
+    $0.035 leaves room: about $26 a month for the server at most, about $32 with the disks and
+    the address, while a normal month stays at the market price (about $24-27 in all).
   EOT
   type        = string
-  default     = "0.03"
+  default     = "0.035"
 }
 
 variable "ami_id" {

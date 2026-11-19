@@ -229,7 +229,9 @@ alerting:
       - uid: sa-error-logs
         title: Errors in the logs
         condition: B
-        for: 0m
+        # Five minutes over the line, not one burst: a server move or the staged start makes
+        # every service log a few errors at once and then stop (19.11, a dozen messages a day).
+        for: 5m
         noDataState: OK
         execErrState: KeepLast
         annotations:
@@ -244,7 +246,9 @@ alerting:
             to: 0
           model:
             refId: A
-            expr: sum by (app) (count_over_time({namespace="scheduling-agent", level="error"}[10m]))
+            # Not OpenTelemetry's own "failed to export" lines: they mean Alloy is unreachable,
+            # which MonitoringComponentDown (Prometheus) already watches, not a service failing.
+            expr: sum by (app) (count_over_time({namespace="scheduling-agent", level="error"} != "opentelemetry.exporter" [10m]))
             instant: true
             queryType: instant
         - refId: B

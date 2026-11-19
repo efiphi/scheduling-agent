@@ -166,4 +166,6 @@ UNIT
 systemctl daemon-reload
 systemctl enable sa-backup.timer sa-boot-stagger.service
 systemctl start sa-backup.timer
+# A new server (spot replacement) is a cold start too: run it now, without waiting here.
+systemctl start --no-block sa-boot-stagger.service
 echo "boot done: instance=$instance_id"

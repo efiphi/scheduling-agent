@@ -9,7 +9,7 @@
  * new recipient). Every screen takes its colors from these tokens, never raw palette shades.
  */
 @theme {
-  --font-sans: "Heebo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-sans: "Heebo Variable", "Heebo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
 
   --color-canvas: #f6f5f1;
   --color-surface: #ffffff;

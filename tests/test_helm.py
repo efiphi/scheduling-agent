@@ -521,23 +521,24 @@ def test_at_most_one_cluster_polls_the_mailbox() -> None:
 
 
 @needs_helm
-def test_the_cloud_relay_waits_for_the_data_k3d_keeps_one(
-    objects: list[dict[str, Any]], aws_objects: list[dict[str, Any]]
-) -> None:
-    def replicas(objs: list[dict[str, Any]]) -> dict[str, int]:
-        return {
-            o["metadata"]["name"]: o["spec"]["replicas"] for o in objs if o["kind"] == "Deployment"
-        }
+def test_exactly_one_cluster_polls_and_alerts_the_cloud(aws_objects: list[dict[str, Any]]) -> None:
+    # Since step 6.5 the cloud reads the mailbox and sends the owner's alerts; k3d does neither.
+    def state(objs: list[dict[str, Any]]) -> tuple[bool, int]:
+        [poll] = [
+            o for o in objs if o["kind"] == "CronJob" and o["metadata"]["name"] == "gmail-poll"
+        ]
+        [relay] = [
+            o for o in objs if o["kind"] == "Deployment" and o["metadata"]["name"] == "alert-relay"
+        ]
+        return poll["spec"]["suspend"] is False, relay["spec"]["replicas"]
 
-    k3d, aws = replicas(objects), replicas(aws_objects)
+    assert state(aws_objects) == (True, 1)
+    assert state(render("k3d/values.yaml", "k3d/settings.yaml")) == (False, 0)
     # One server, no spare memory: a rollout stops the old pod before starting the new one.
     for o in aws_objects:
         if o["kind"] == "Deployment":
             assert o["spec"]["strategy"]["rollingUpdate"] == {"maxSurge": 0, "maxUnavailable": 1}
-    assert not any("strategy" in o["spec"] for o in objects if o["kind"] == "Deployment")
-    assert set(k3d.values()) == {1}
-    assert aws.pop("alert-relay") == 0
-    assert set(aws.values()) == {1}
+            assert o["spec"]["replicas"] == 1, o["metadata"]["name"]
 
 
 @needs_helm

@@ -1,0 +1,61 @@
+# Falco on the cloud server (step 6.6). Its own project: it is the one component that runs
+# privileged (it reads the kernel), so nothing else may deploy into its namespace and it
+# may deploy nowhere else.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: runtime-security
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  description: Falco, runtime detection on the host
+  sourceRepos:
+    - https://github.com/efiphi/scheduling-agent.git
+    - https://falcosecurity.github.io/charts
+  destinations:
+    - {server: https://kubernetes.default.svc, namespace: falco}
+  clusterResourceWhitelist:
+    - {group: "", kind: Namespace}
+    - {group: rbac.authorization.k8s.io, kind: ClusterRole}
+    - {group: rbac.authorization.k8s.io, kind: ClusterRoleBinding}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: falco-config
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  project: runtime-security
+  source:
+    repoURL: https://github.com/efiphi/scheduling-agent.git
+    targetRevision: main
+    path: deploy/cluster/falco/manifests
+  destination: {server: https://kubernetes.default.svc, namespace: falco}
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: falco
+  namespace: argocd
+spec:
+  project: runtime-security
+  sources:
+    - repoURL: https://falcosecurity.github.io/charts
+      chart: falco
+      targetRevision: 9.2.2
+      helm:
+        releaseName: falco
+        valueFiles: [$values/deploy/cluster/falco/values.yaml]
+    - repoURL: https://github.com/efiphi/scheduling-agent.git
+      targetRevision: main
+      ref: values
+  destination: {server: https://kubernetes.default.svc, namespace: falco}
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true]

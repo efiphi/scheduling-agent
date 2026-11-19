@@ -1,6 +1,6 @@
 # ADR-009: Temporary cloud: k3s on one AWS server via Terraform
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-023](023-always-on-cloud-server.md) (19 November 2026): the server runs always on, on spot, and heals itself
 - **Date:** 2026-10-23
 
 ## Context

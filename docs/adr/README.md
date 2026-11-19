@@ -12,7 +12,7 @@ Each significant decision is recorded as a short ADR: what was decided, why, wha
 | [006](006-four-services-by-key-ownership.md) | Four services, split by key ownership | Accepted |
 | [007](007-react-frontend.md) | React, TypeScript and Vite for the web app | Accepted |
 | [008](008-sealed-secrets.md) | Sealed Secrets for Kubernetes secrets | Accepted |
-| [009](009-temporary-cloud-k3s-aws.md) | Temporary cloud: k3s on one AWS server via Terraform | Accepted |
+| [009](009-temporary-cloud-k3s-aws.md) | Temporary cloud: k3s on one AWS server via Terraform | Superseded by 023 |
 | [010](010-split-oauth-flows.md) | Two OAuth flows; Google tokens land only in `google-gateway` | Accepted |
 | [011](011-agent-has-no-db-access.md) | The agent has no database access | Accepted |
 | [012](012-outbound-email-from-template.md) | Outbound email is built from a template in `google-gateway` | Accepted |
@@ -26,3 +26,4 @@ Each significant decision is recorded as a short ADR: what was decided, why, wha
 | [020](020-evals-and-red-team-in-ci.md) | Evals and the red team in CI, with verdicts from code | Accepted |
 | [021](021-environment-branch.md) | Image digests on their own branch, so main can be protected | Accepted |
 | [022](022-detections-and-alerts.md) | Detection rules as code, alerts to WhatsApp | Accepted |
+| [023](023-always-on-cloud-server.md) | An always-on cloud server: one spot instance that heals itself | Accepted |

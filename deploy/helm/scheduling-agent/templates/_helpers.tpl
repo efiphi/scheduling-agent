@@ -128,13 +128,21 @@ containers:
         containerPort: {{ $w.port }}
     {{- end }}
     {{- if $w.health }}
+    # Up to 5 minutes to start, before the liveness check counts: on a busy one-core server
+    # a Python process can take over a minute, and a kill then only starts it over.
+    startupProbe:
+      httpGet: {path: {{ $w.health }}, port: http}
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 30
     readinessProbe:
       httpGet: {path: {{ $w.health }}, port: http}
       periodSeconds: 10
+      timeoutSeconds: 5
     livenessProbe:
       httpGet: {path: {{ $w.health }}, port: http}
-      initialDelaySeconds: 10
       periodSeconds: 30
+      timeoutSeconds: 5
     {{- end }}
     resources:
       requests: {cpu: {{ $root.Values.cpuRequest | default $w.resources.cpu }}, memory: {{ $root.Values.memoryRequest | default $w.resources.memory }}}

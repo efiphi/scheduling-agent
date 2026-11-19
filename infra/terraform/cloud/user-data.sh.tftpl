@@ -48,6 +48,7 @@ if [ ! -f /swapfile ]; then
   mkswap /swapfile
 fi
 swapon /swapfile
+grep -q "^/swapfile" /etc/fstab || echo "/swapfile none swap defaults 0 0" >> /etc/fstab # after a reboot too
 echo "vm.swappiness = 10" > /etc/sysctl.d/90-scheduling-agent.conf
 sysctl -q --system
 
@@ -129,6 +130,40 @@ RandomizedDelaySec=10min
 [Install]
 WantedBy=timers.target
 UNIT
+# 6. A cold start in steps (reboot or spot replacement). On one core, the ~45 pods that
+#    come back at once starve each other, health checks time out, and Kubernetes restarts
+#    them in a loop that never settles (seen 19.11: 100% CPU for 20 minutes). Started once
+#    the application runs, the monitoring tools take two minutes and no restarts. So: hold
+#    the monitoring tools and Argo CD until the application is up, then let Argo CD bring
+#    them back as they are in git.
+cat > /usr/local/bin/sa-boot-stagger <<'SCRIPT'
+#!/bin/bash
+set -uo pipefail
+k() { /usr/local/bin/k3s kubectl --request-timeout=20s "$@"; }
+for _ in $(seq 180); do k get --raw /readyz >/dev/null 2>&1 && break; sleep 2; done
+k -n argocd scale statefulset argocd-application-controller --replicas=0
+k -n observability scale deploy,statefulset --all --replicas=0
+echo "monitoring held; waiting for the application"
+k -n scheduling-agent wait --for=condition=Available deploy --all --timeout=600s
+k -n argocd scale statefulset argocd-application-controller --replicas=1
+echo "application up; Argo CD restores the rest from git"
+SCRIPT
+chmod 0700 /usr/local/bin/sa-boot-stagger
+cat > /etc/systemd/system/sa-boot-stagger.service <<'UNIT'
+[Unit]
+Description=Start the scheduling agent before its monitoring after a cold boot
+After=k3s.service
+Wants=k3s.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/sa-boot-stagger
+TimeoutStartSec=15min
+
+[Install]
+WantedBy=multi-user.target
+UNIT
 systemctl daemon-reload
-systemctl enable --now sa-backup.timer
+systemctl enable sa-backup.timer sa-boot-stagger.service
+systemctl start sa-backup.timer
 echo "boot done: instance=$instance_id"

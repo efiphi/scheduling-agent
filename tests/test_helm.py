@@ -515,7 +515,7 @@ def test_at_most_one_cluster_polls_the_mailbox() -> None:
         ]
         return job["spec"]["suspend"] is False
 
-    k3d = render("k3d/values.yaml")
+    k3d = render("k3d/values.yaml", "k3d/settings.yaml")
     aws = render("k3d/values.yaml", "aws/values.yaml")
     assert not (polls(k3d) and polls(aws))
 
@@ -688,3 +688,18 @@ def test_no_pod_reserves_more_memory_than_its_limit(
             for c in spec["containers"] + spec.get("initContainers", []):
                 r = c["resources"]
                 assert mebibytes(r["requests"]["memory"]) <= mebibytes(r["limits"]["memory"]), name
+
+
+def test_the_digest_file_holds_digests_only() -> None:
+    # CI's merge into deploy/k3d keeps that branch's side of a nearby change, so a setting
+    # put in the digest file can vanish without a conflict (seen 19.11).
+    values = yaml.safe_load((ENVIRONMENT_VALUES / "k3d/values.yaml").read_text())
+    assert set(values) == {"images"}
+    # And the Argo CD apps read the files the tests render.
+    app = yaml.safe_load((ROOT / "deploy/cluster/argocd/apps/scheduling-agent.yaml").read_text())
+    assert [
+        f.rsplit("environments/", 1)[1] for f in app["spec"]["source"]["helm"]["valueFiles"]
+    ] == [
+        "k3d/values.yaml",
+        "k3d/settings.yaml",
+    ]

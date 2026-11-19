@@ -144,8 +144,11 @@ resource "aws_autoscaling_group" "server" {
   desired_capacity    = 1
   vpc_zone_identifier = [aws_subnet.public.id]
   health_check_type   = "EC2"
-  # Start a replacement as soon as AWS warns that a spot instance is at risk.
-  capacity_rebalance = true
+  # Move only when AWS actually takes the instance back (two minutes' notice), not on every
+  # "elevated risk" warning. A rebalance starts the replacement early so two can overlap,
+  # which helps a fleet; one server that owns its data volume cannot overlap, so each
+  # warning only cost a full move and ~6 minutes down (three in an hour on 19.11).
+  capacity_rebalance = false
 
   mixed_instances_policy {
     instances_distribution {

@@ -138,15 +138,26 @@ UNIT
 #    them back as they are in git.
 cat > /usr/local/bin/sa-boot-stagger <<'SCRIPT'
 #!/bin/bash
+# k3s can restart once more while it settles (seen 19.11: the API refused connections right
+# after the hold, and Argo CD was left stopped). So every step retries, and Argo CD is
+# brought back on any exit, even a failed one: without it nothing restores the rest.
 set -uo pipefail
 k() { /usr/local/bin/k3s kubectl --request-timeout=20s "$@"; }
-for _ in $(seq 180); do k get --raw /readyz >/dev/null 2>&1 && break; sleep 2; done
-k -n argocd scale statefulset argocd-application-controller --replicas=0
-k -n observability scale deploy,statefulset --all --replicas=0
+retry() { for _ in $(seq 60); do "$@" && return 0; sleep 5; done; return 1; }
+release() {
+  retry k -n argocd scale statefulset argocd-application-controller --replicas=1 >/dev/null
+  echo "Argo CD controller: $(k -n argocd get statefulset argocd-application-controller -o jsonpath='{.spec.replicas}')"
+}
+retry k get --raw /readyz >/dev/null
+trap release EXIT
+retry k -n argocd scale statefulset argocd-application-controller --replicas=0
+retry k -n observability scale deploy,statefulset --all --replicas=0
 echo "monitoring held; waiting for the application"
-k -n scheduling-agent wait --for=condition=Available deploy --all --timeout=600s
-k -n argocd scale statefulset argocd-application-controller --replicas=1
-echo "application up; Argo CD restores the rest from git"
+for _ in $(seq 60); do
+  k -n scheduling-agent wait --for=condition=Available deploy --all --timeout=10s >/dev/null 2>&1 && break
+  sleep 5
+done
+echo "application up (or 10 minutes passed); Argo CD restores the rest from git"
 SCRIPT
 chmod 0700 /usr/local/bin/sa-boot-stagger
 cat > /etc/systemd/system/sa-boot-stagger.service <<'UNIT'

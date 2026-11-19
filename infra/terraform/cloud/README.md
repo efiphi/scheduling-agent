@@ -13,9 +13,10 @@ terraform init && terraform plan && terraform apply
 ## What it costs
 
 About $24-27 a month (18.11 prices): the spot instance $19-21 (m6g/m8g.medium, a full core),
-the disks $2.9, the public IPv4 address $3.7. Spot is capped at $0.03 an hour
-(`spot_max_price`), so never more than about $28; above the cap AWS gives no server rather
-than a bigger bill. The account's budget alarm is $25 (bootstrap stack).
+the disks $2.9, the public IPv4 address $3.7. Spot is billed at the market price and capped
+at $0.035 an hour (`spot_max_price`), so never more than about $32; above the cap AWS takes
+the server back rather than billing more. The cap was $0.03 until 19.11, right above the
+market price, and small rises kept moving the server. The account's budget alarm is $25 (bootstrap stack).
 
 Not t4g.medium ($13-16): this account cannot use "unlimited" CPU credits, and in "standard"
 mode every new spot server starts with no credits, gets 20% of each core, and k3s fails to

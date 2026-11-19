@@ -450,6 +450,12 @@ def test_alert_rules_are_unique_explained_and_watch_for_silence() -> None:
     assert all(rule["annotations"]["summary"] for rule in rules.values())
     # E13: if polling stops reporting at all, that is the failure itself, not "no data".
     assert rules["sa-poll-stale"]["noDataState"] == "Alerting"
+    # Service errors only, and only when they last: telemetry export failures (Alloy down,
+    # watched elsewhere) and one-off bursts during a server move paged the owner again and again.
+    errors = rules["sa-error-logs"]
+    [query] = [d for d in errors["data"] if d["refId"] == "A"]
+    assert '!= "opentelemetry.exporter"' in query["model"]["expr"]
+    assert errors["for"] == "5m"
     # A job suspended on purpose is not stale (ADR-023), but only through this factor.
     [query] = [d for d in rules["sa-poll-stale"]["data"] if d["refId"] == "A"]
     assert "(1 - kube_cronjob_spec_suspend{" in query["model"]["expr"]

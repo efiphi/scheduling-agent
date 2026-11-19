@@ -86,4 +86,49 @@ WantedBy=multi-user.target
 UNIT
 systemctl daemon-reload
 systemctl enable --now k3s
+
+# 5. A nightly database backup to S3 (backup.tf). On the host, because only the host has
+#    the instance role: pods cannot reach it (IMDSv2, hop limit 1).
+cat > /usr/local/bin/sa-backup <<'SCRIPT'
+#!/bin/bash
+# pg_dump of the database, uploaded to the backup bucket, which this server may write to and
+# nothing more. The temporary copy is on the data volume, root only, and removed after.
+set -euo pipefail
+dir=/var/lib/rancher/sa-backup
+mkdir -p -m 0700 "$dir"
+file="$dir/scheduling_agent-$(date -u +%Y-%m-%dT%H%M%SZ).dump"
+trap 'rm -f "$file"' EXIT
+/usr/local/bin/k3s kubectl -n scheduling-agent exec postgres-0 -- \
+  pg_dump -U postgres --format=custom scheduling_agent > "$file"
+# The custom format starts with "PGDMP"; anything else is an error, not a backup.
+[ "$(head -c 5 "$file")" = PGDMP ] || { echo "not a pg_dump file" >&2; exit 1; }
+aws s3 cp "$file" "s3://${backup_bucket}/postgres/$(basename "$file")" \
+  --region "${region}" --sse AES256 --only-show-errors
+echo "uploaded $(basename "$file") ($(stat -c %s "$file") bytes)"
+SCRIPT
+chmod 0700 /usr/local/bin/sa-backup
+cat > /etc/systemd/system/sa-backup.service <<'UNIT'
+[Unit]
+Description=Back up the scheduling-agent database to S3
+After=k3s.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/sa-backup
+UNIT
+cat > /etc/systemd/system/sa-backup.timer <<'UNIT'
+[Unit]
+Description=Nightly scheduling-agent database backup
+
+[Timer]
+# 03:30 in Israel; Persistent runs a missed backup when the server comes back.
+OnCalendar=*-*-* 01:30:00 UTC
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now sa-backup.timer
 echo "boot done: instance=$instance_id"

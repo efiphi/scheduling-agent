@@ -703,3 +703,16 @@ def test_the_digest_file_holds_digests_only() -> None:
         "k3d/values.yaml",
         "k3d/settings.yaml",
     ]
+
+
+@needs_helm
+def test_every_http_process_gets_minutes_to_start_before_liveness_counts(
+    aws_objects: list[dict[str, Any]],
+) -> None:
+    # A liveness kill during a slow start only starts the process over (seen 19.11).
+    for name, spec in pod_specs(aws_objects).items():
+        for c in spec["containers"]:
+            if "livenessProbe" in c:
+                startup = c["startupProbe"]
+                assert startup["periodSeconds"] * startup["failureThreshold"] >= 300, name
+                assert c["livenessProbe"]["timeoutSeconds"] >= 5, name

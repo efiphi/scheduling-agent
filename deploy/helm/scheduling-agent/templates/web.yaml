@@ -50,12 +50,19 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           readinessProbe:
             httpGet: {path: /healthz, port: http}
             periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             httpGet: {path: /healthz, port: http}
             periodSeconds: 30
+            timeoutSeconds: 5
           resources:
             requests:
               cpu: {{ .Values.cpuRequest | default .Values.web.resources.cpu }}

@@ -89,8 +89,52 @@ groups:
         annotations:
           summary_he: "אירוע אבטחה מסוג לא מוכר"
 
+  - name: runtime
+    # Falco on the cloud server (step 6.6): a counter per Falco rule that fired, with its
+    # priority (syslog numbers: 0 emergency .. 4 warning, 5 notice). A counter appears only
+    # when its rule first fires, at 1, and increase() never sees a series' first sample; so
+    # each rule also catches a series that was not there 10 minutes ago. The increase is
+    # filtered to > 0 first: "or" keeps the left side for matching labels, and a fresh
+    # series' increase is 0, which would hide it. Silent on k3d, which runs no Falco.
+    rules:
+      - alert: ShellInContainer
+        # Nobody needs an interactive shell inside a running container. It is either the
+        # owner debugging (then the message confirms it) or someone who got in (T21).
+        expr: |
+          sum by (rule_name) (
+            (increase(falcosecurity_falco_rules_matches_total{rule_name="Terminal shell in container"}[10m]) > 0)
+            or (falcosecurity_falco_rules_matches_total{rule_name="Terminal shell in container"}
+                unless falcosecurity_falco_rules_matches_total{rule_name="Terminal shell in container"} offset 10m)
+          ) > 0
+        labels: {severity: critical, threat: T21}
+        annotations:
+          summary_he: "נפתח shell אינטראקטיבי בתוך קונטיינר בשרת"
+
+      - alert: RuntimeThreat
+        # Any Falco rule of priority Warning or worse: a sensitive file read, a write under
+        # /etc, a new binary run inside a container, a reverse shell (T20, T21). Notice-level
+        # rules (e.g. Argo CD calling the Kubernetes API, which it must) stay in the logs.
+        expr: |
+          sum by (rule_name) (
+            (increase(falcosecurity_falco_rules_matches_total{priority=~"[0-4]"}[10m]) > 0)
+            or (falcosecurity_falco_rules_matches_total{priority=~"[0-4]"}
+                unless falcosecurity_falco_rules_matches_total{priority=~"[0-4]"} offset 10m)
+          ) > 0
+        labels: {severity: critical, threat: T21}
+        annotations:
+          summary_he: "Falco זיהה פעילות חשודה בשרת"
+
   - name: watchdog
     rules:
+      - alert: RuntimeDetectionDown
+        # Falco not running on the server means the runtime rules above go quiet (E13). Only
+        # where Falco is deployed: the series does not exist on k3d.
+        expr: max(kube_daemonset_status_number_ready{daemonset="falco"}) < 1
+        for: 10m
+        labels: {severity: warning, threat: E13}
+        annotations:
+          summary_he: "Falco לא פעיל בשרת"
+
       - alert: MonitoringComponentDown
         # Grafana evaluates the operational alerts and Alloy carries every service's metrics
         # and logs. If either is down, other alerts go quiet with it (E13).

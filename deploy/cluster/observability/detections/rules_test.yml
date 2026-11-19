@@ -219,3 +219,71 @@ tests:
         exp_alerts:
           - exp_labels: {severity: warning, threat: E13}
             exp_annotations: {summary_he: "השירותים הפסיקו לשלוח מדדים"}
+
+  # Falco (step 6.6). Its counters start at 1, the first time a rule fires: no priming.
+  - name: test_t21_a_shell_in_a_container_alerts_even_as_a_new_series
+    interval: 1m
+    input_series:
+      - series: 'falcosecurity_falco_rules_matches_total{rule_name="Terminal shell in container", priority="5"}'
+        values: '_ _ 1 1 1'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ShellInContainer
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: ShellInContainer
+        exp_alerts:
+          - exp_labels: {severity: critical, threat: T21, rule_name: Terminal shell in container}
+            exp_annotations: {summary_he: "נפתח shell אינטראקטיבי בתוך קונטיינר בשרת"}
+
+  - name: test_t21_a_second_shell_on_a_known_series_alerts_and_quiet_falls_silent
+    interval: 1m
+    input_series:
+      - series: 'falcosecurity_falco_rules_matches_total{rule_name="Terminal shell in container", priority="5"}'
+        values: '1x20 2x20'
+    alert_rule_test:
+      - eval_time: 18m
+        alertname: ShellInContainer
+        exp_alerts: []
+      - eval_time: 22m
+        alertname: ShellInContainer
+        exp_alerts:
+          - exp_labels: {severity: critical, threat: T21, rule_name: Terminal shell in container}
+            exp_annotations: {summary_he: "נפתח shell אינטראקטיבי בתוך קונטיינר בשרת"}
+
+  - name: test_t21_a_warning_rule_from_falco_alerts
+    interval: 1m
+    input_series:
+      - series: 'falcosecurity_falco_rules_matches_total{rule_name="Read sensitive file untrusted", priority="4"}'
+        values: '_ 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: RuntimeThreat
+        exp_alerts:
+          - exp_labels: {severity: critical, threat: T21, rule_name: Read sensitive file untrusted}
+            exp_annotations: {summary_he: "Falco זיהה פעילות חשודה בשרת"}
+
+  - name: test_t21_notice_rules_like_argocd_calling_the_api_do_not_page
+    interval: 1m
+    input_series:
+      - series: 'falcosecurity_falco_rules_matches_total{rule_name="Contact K8S API Server From Container", priority="5"}'
+        values: '_ 1 5 9 14'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: RuntimeThreat
+        exp_alerts: []
+
+  - name: test_e13_falco_not_running_alerts_after_ten_minutes
+    interval: 1m
+    input_series:
+      - series: 'kube_daemonset_status_number_ready{daemonset="falco", namespace="falco"}'
+        values: '1 1 0x15'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: RuntimeDetectionDown
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: RuntimeDetectionDown
+        exp_alerts:
+          - exp_labels: {severity: warning, threat: E13}
+            exp_annotations: {summary_he: "Falco לא פעיל בשרת"}

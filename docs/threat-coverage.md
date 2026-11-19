@@ -28,7 +28,7 @@ This table says what is checked. Whether it passes is reported by CI.
 | T18 | הרשאות עודפות | 3 |  |  |
 | T19 | Stored XSS באפליקציה הוובית | 4 |  |  |
 | T20 | שרשרת אספקה | 5 |  |  |
-| T21 | הגדרות Kubernetes חלשות | 6 |  |  |
+| T21 | הגדרות Kubernetes חלשות | 10 |  |  |
 | T22 | דליפת מידע דרך לוגים ומעקב | 11 |  |  |
 | T23 | חשיפה לספק מודל השפה | 1 |  |  |
 | T24 | הצפת מיילים (denial of wallet) | 9 |  |  |
@@ -51,4 +51,4 @@ This table says what is checked. Whether it passes is reported by CI.
 | E10 | טעויות ב-thread עם כמה משתתפים | 3 |  |  |
 | E11 | ביטול או שינוי של האירוע הלא נכון |  |  | No cancelling or moving events yet: the only actions are a reply and a new event. Needs tests when UC-M4 and UC-M5 are built. |
 | E12 | עייפות אישורים |  |  | A human factor. Measuring it needs real use over time, and the MVP has no such data. |
-| E13 | כשל שקט | 18 |  |  |
+| E13 | כשל שקט | 19 |  |  |

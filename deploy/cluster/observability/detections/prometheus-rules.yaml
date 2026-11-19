@@ -84,8 +84,36 @@ serverFiles:
           threat: E13
         annotations:
           summary_he: אירוע אבטחה מסוג לא מוכר
+    - name: runtime
+      rules:
+      - alert: ShellInContainer
+        expr: "sum by (rule_name) (\n  (increase(falcosecurity_falco_rules_matches_total{rule_name=\"Terminal shell in container\"\
+          }[10m]) > 0)\n  or (falcosecurity_falco_rules_matches_total{rule_name=\"Terminal shell in container\"}\n      unless\
+          \ falcosecurity_falco_rules_matches_total{rule_name=\"Terminal shell in container\"} offset 10m)\n) > 0\n"
+        labels:
+          severity: critical
+          threat: T21
+        annotations:
+          summary_he: נפתח shell אינטראקטיבי בתוך קונטיינר בשרת
+      - alert: RuntimeThreat
+        expr: "sum by (rule_name) (\n  (increase(falcosecurity_falco_rules_matches_total{priority=~\"[0-4]\"}[10m]) > 0)\n\
+          \  or (falcosecurity_falco_rules_matches_total{priority=~\"[0-4]\"}\n      unless falcosecurity_falco_rules_matches_total{priority=~\"\
+          [0-4]\"} offset 10m)\n) > 0\n"
+        labels:
+          severity: critical
+          threat: T21
+        annotations:
+          summary_he: Falco זיהה פעילות חשודה בשרת
     - name: watchdog
       rules:
+      - alert: RuntimeDetectionDown
+        expr: max(kube_daemonset_status_number_ready{daemonset="falco"}) < 1
+        for: 10m
+        labels:
+          severity: warning
+          threat: E13
+        annotations:
+          summary_he: Falco לא פעיל בשרת
       - alert: MonitoringComponentDown
         expr: max by (deployment) (kube_deployment_status_replicas_available{namespace="observability", deployment=~"grafana|alloy"})
           < 1

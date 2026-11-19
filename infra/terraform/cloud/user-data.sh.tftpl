@@ -59,6 +59,20 @@ echo "${k3s_sha256}  /usr/local/bin/k3s" | sha256sum -c -
 chmod 0755 /usr/local/bin/k3s
 for tool in kubectl crictl ctr; do ln -sf /usr/local/bin/k3s "/usr/local/bin/$tool"; done
 
+# Pods may use the swap too, within limits (Kubernetes' LimitedSwap): each pod without a
+# guaranteed reservation gets a share in proportion to its memory request. Without it, swap
+# serves only the host, and when memory runs out every pod stalls at once (seen 19.11: 98%
+# memory pressure, the API and the site unreachable). A drop-in on the data volume, read by
+# k3s's kubelet at start.
+mkdir -p /var/lib/rancher/k3s/agent/etc/kubelet.conf.d
+cat > /var/lib/rancher/k3s/agent/etc/kubelet.conf.d/50-swap.conf <<'CONF'
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+failSwapOn: false
+memorySwap:
+  swapBehavior: LimitedSwap
+CONF
+
 # 4. The same node name every time, so a new instance continues the same cluster.
 cat > /etc/systemd/system/k3s.service <<'UNIT'
 [Unit]

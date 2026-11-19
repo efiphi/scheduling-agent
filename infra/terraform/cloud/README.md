@@ -66,6 +66,28 @@ The cloud runs the same images as k3d (the `deploy/k3d` branch, ADR-021) with
 reservations for one 4 GiB server, and gmail-poll suspended until the data moves (step 6.5),
 so the two clusters never answer the same email twice.
 
+## Backups and restore
+
+Every night at 03:30 (Israel) the server runs `sa-backup` (a systemd timer, user-data):
+`pg_dump` of the database into `s3://sa-backups-<account>/postgres/`, kept 14 days. The
+server may only write there; reading is the owner's admin login only (backup.tf).
+
+```bash
+aws ssm start-session --target <instance> --document-name AWS-StartInteractiveCommand \
+  --parameters command="sudo systemctl start sa-backup && sudo journalctl -u sa-backup -n 3"  # one now
+aws s3 ls s3://sa-backups-571771087482/postgres/                    # the list
+aws s3 cp s3://sa-backups-571771087482/postgres/<file>.dump .       # one copy, owner only
+```
+
+Restore: into the cluster's Postgres, as the superuser, replacing what is there:
+
+```bash
+kubectl -n scheduling-agent exec -i postgres-0 -- \
+  pg_restore -U postgres -d scheduling_agent --clean --if-exists --no-owner < <file>.dump
+```
+
+Then `kubectl -n scheduling-agent rollout restart deploy` so every process reconnects.
+
 ## When spot takes the server back
 
 The Auto Scaling group starts a new instance. Its boot script (`user-data.sh.tftpl`) takes the

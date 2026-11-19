@@ -1,0 +1,66 @@
+name: Outside check
+
+# The cloud server checked from outside it (step 6.6, ADR-023). Its own alerts (ADR-022) run
+# on the server: if the server, its network or its monitoring dies, they die with it and say
+# nothing. This job runs on GitHub's machines and fails if the agent is unreachable or
+# unsafe to reach; GitHub then emails the owner about the failed run. Free: the repository is
+# public. Read-only: it sends nothing but plain GET requests, with no login and no secret.
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: outside-check
+  cancel-in-progress: false
+
+env:
+  HOST: agent.efi-agent.dev
+
+jobs:
+  check:
+    name: The agent answers, over a valid certificate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # A slow minute is not an outage (a spot replacement takes about one): try for 3 minutes.
+      - name: The api answers /healthz
+        run: |
+          for i in $(seq 1 6); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://${HOST}/api/healthz") || true
+            [ "$code" = 200 ] && exit 0
+            echo "attempt $i: $code"; sleep 30
+          done
+          echo "::error::https://${HOST}/api/healthz did not answer 200"; exit 1
+
+      - name: The web app loads, with its security headers
+        run: |
+          headers=$(curl -sfI --max-time 15 "https://${HOST}/")
+          for h in "frame-ancestors 'none'" "strict-transport-security" "x-content-type-options: nosniff"; do
+            grep -qi "$h" <<<"$headers" || { echo "::error::missing header: $h"; exit 1; }
+          done
+
+      - name: Plain HTTP only redirects to HTTPS
+        run: |
+          location=$(curl -s -o /dev/null -w '%{redirect_url}' --max-time 15 "http://${HOST}/")
+          [ "$location" = "https://${HOST}/" ] || { echo "::error::http redirects to '$location'"; exit 1; }
+
+      # Traefik renews 30 days before expiry; under 14 days left means renewal is failing.
+      - name: The certificate is valid for at least 14 more days
+        run: |
+          end=$(echo | openssl s_client -connect "${HOST}:443" -servername "${HOST}" 2>/dev/null \
+            | openssl x509 -noout -enddate | cut -d= -f2)
+          left=$(( ($(date -d "$end" +%s) - $(date +%s)) / 86400 ))
+          echo "certificate expires $end ($left days)"
+          [ "$left" -ge 14 ] || { echo "::error::certificate expires in $left days"; exit 1; }
+
+      # The only doors are 80 and 443 (security group): the Kubernetes API and SSH stay closed.
+      - name: Nothing else is open
+        run: |
+          for port in 22 6443 10250; do
+            if timeout 5 bash -c "</dev/tcp/${HOST}/${port}" 2>/dev/null; then
+              echo "::error::port $port is open to the internet"; exit 1
+            fi
+          done

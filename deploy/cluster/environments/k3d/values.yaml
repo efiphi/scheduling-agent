@@ -1,3 +1,7 @@
+# Image digests only: CI rewrites this file on the deploy/k3d branch, and its merge keeps
+# that branch's side of any nearby change, so anything else here can be silently dropped
+# (seen 19.11). k3d's settings live in settings.yaml.
+#
 # The shape of the k3d environment's values, for CI to lint and render the chart with.
 #
 # Not what runs: Argo CD deploys the deploy/k3d branch, where CI rewrites this file after every
@@ -8,9 +12,3 @@ images:
   gateway: ghcr.io/efiphi/scheduling-agent-gateway@sha256:8a14dbe829919186fbc4aae4d496bf748a327a1b728ed2a6e9775a78bd710ee3
   agent: ghcr.io/efiphi/scheduling-agent-agent@sha256:fa7273cdfce06448547ab9bbbb957cfef6121aafc10c1012b21b99ccdede8932
   migrations: ghcr.io/efiphi/scheduling-agent-migrations@sha256:eac38cb68f355cf9f11eec16fb88e031b4293e38c7419613528a2e5ad9848697
-
-# The cloud server polls the demo mailbox from step 6.5 on (ADR-023); two clusters on one
-# mailbox would each answer the same email. k3d stays for local work, without polling.
-cronJobs:
-  gmail-poll:
-    suspend: true

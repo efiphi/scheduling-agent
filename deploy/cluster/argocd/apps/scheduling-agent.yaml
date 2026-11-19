@@ -13,7 +13,9 @@ spec:
     path: deploy/helm/scheduling-agent
     helm:
       releaseName: scheduling-agent
-      valueFiles: [../../cluster/environments/k3d/values.yaml]
+      valueFiles:
+        - ../../cluster/environments/k3d/values.yaml     # the image digests (CI)
+        - ../../cluster/environments/k3d/settings.yaml   # k3d's own settings
   destination:
     server: https://kubernetes.default.svc
     namespace: scheduling-agent

@@ -1,0 +1,7 @@
+# k3d's own settings, on top of the chart's values (the digests are in values.yaml).
+
+# The cloud server polls the demo mailbox from step 6.5 on (ADR-023); two clusters on one
+# mailbox would each answer the same email. k3d stays for local work, without polling.
+cronJobs:
+  gmail-poll:
+    suspend: true

@@ -168,4 +168,44 @@ systemctl enable sa-backup.timer sa-boot-stagger.service
 systemctl start sa-backup.timer
 # A new server (spot replacement) is a cold start too: run it now, without waiting here.
 systemctl start --no-block sa-boot-stagger.service
+
+# 7. Security updates, every day, unattended (step 6.6). Amazon Linux 2023 pins its
+#    repositories to the release the image was built from, and fixes land in newer releases,
+#    so "latest" first; otherwise dnf-automatic finds almost nothing to install.
+echo latest > /etc/dnf/vars/releasever
+dnf install -y -q dnf-automatic
+cat > /etc/dnf/automatic.conf <<'CONF'
+[commands]
+upgrade_type = security
+download_updates = yes
+apply_updates = yes
+random_sleep = 3600
+
+[emitters]
+emit_via = stdio
+CONF
+systemctl enable --now dnf-automatic.timer
+
+# A kernel or core-library fix takes effect only after a reboot: once a week, and only if
+# an installed update needs one (Sunday 04:00 Israel; the staged start above handles it).
+cat > /etc/systemd/system/sa-reboot-if-needed.service <<'UNIT'
+[Unit]
+Description=Reboot if a security update needs it
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'dnf needs-restarting -r >/dev/null || systemctl reboot'
+UNIT
+cat > /etc/systemd/system/sa-reboot-if-needed.timer <<'UNIT'
+[Unit]
+Description=Weekly reboot window for security updates
+
+[Timer]
+OnCalendar=Sun *-*-* 02:00:00 UTC
+
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now sa-reboot-if-needed.timer
 echo "boot done: instance=$instance_id"

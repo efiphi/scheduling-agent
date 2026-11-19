@@ -496,19 +496,28 @@ def aws_objects() -> list[dict[str, Any]]:
     return [doc for doc in yaml.safe_load_all(out) if doc]
 
 
+def render(*value_files: str) -> list[dict[str, Any]]:
+    """The chart with these environment value files, in order, as Argo CD applies them."""
+    assert HELM is not None
+    args = [arg for f in value_files for arg in ("-f", str(ENVIRONMENT_VALUES / f))]
+    out = subprocess.run(  # noqa: S603 - a fixed command, no user input
+        [HELM, "template", "test", str(CHART), *args], capture_output=True, text=True, check=True
+    ).stdout
+    return [doc for doc in yaml.safe_load_all(out) if doc]
+
+
 @needs_helm
-def test_the_cloud_does_not_poll_the_mailbox_k3d_still_polls(
-    objects: list[dict[str, Any]], aws_objects: list[dict[str, Any]]
-) -> None:
-    # Two clusters on one demo mailbox would each answer the same email (until step 6.5).
-    def poll(objs: list[dict[str, Any]]) -> Any:
+def test_at_most_one_cluster_polls_the_mailbox() -> None:
+    # Two clusters on one demo mailbox would each answer the same email (ADR-023).
+    def polls(objs: list[dict[str, Any]]) -> bool:
         [job] = [
             o for o in objs if o["kind"] == "CronJob" and o["metadata"]["name"] == "gmail-poll"
         ]
-        return job["spec"]
+        return job["spec"]["suspend"] is False
 
-    assert poll(aws_objects)["suspend"] is True
-    assert poll(objects)["suspend"] is False
+    k3d = render("k3d/values.yaml")
+    aws = render("k3d/values.yaml", "aws/values.yaml")
+    assert not (polls(k3d) and polls(aws))
 
 
 @needs_helm

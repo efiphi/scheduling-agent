@@ -40,12 +40,20 @@ falco:
   # Log notices and above; the noise below stays out of Loki.
   priority: notice
 
-# A Prometheus counter per rule that fired, read every minute by the Prometheus server.
+# A Prometheus counter per rule that fired, read every minute by the Prometheus server, and
+# nothing else: Falco's internal statistics (per-CPU event counts, libbpf, plugin and state
+# counters) are hundreds of series that Prometheus holds in memory, and on the 4 GiB server
+# they were the last straw (19.11). The detection rules read only the rule counter.
 metrics:
   enabled: true
   interval: 1m
   rulesCountersEnabled: true
-  resourceUtilizationEnabled: true
+  resourceUtilizationEnabled: false
+  stateCountersEnabled: false
+  kernelEventCountersEnabled: false
+  kernelIterEventCountersEnabled: false
+  libbpfStatsEnabled: false
+  pluginsMetricsEnabled: false
   convertMemoryToMB: true
   service:
     create: true

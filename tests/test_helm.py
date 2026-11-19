@@ -736,6 +736,14 @@ def test_t20_t21_falco_is_pinned_offline_and_not_privileged() -> None:
     assert values["driver"] == {"kind": "modern_ebpf", "modernEbpf": {"leastPrivileged": True}}
     # Its findings reach the owner: Prometheus reads the counter per rule.
     assert values["metrics"]["enabled"] is True
+    # Only the rule counter: Falco's internal statistics are hundreds of series (memory).
+    extra = {
+        k: v
+        for k, v in values["metrics"].items()
+        if k.endswith("Enabled") and k != "rulesCountersEnabled"
+    }
+    assert extra and not any(extra.values()), extra
+    assert values["metrics"]["rulesCountersEnabled"] is True
     assert values["metrics"]["service"]["annotations"]["prometheus.io/scrape"] == "true"
     # Its namespace takes nothing but Prometheus on the metrics port.
     policies = list(

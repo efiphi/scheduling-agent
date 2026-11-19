@@ -70,7 +70,7 @@ Work strictly in the layers defined in `docs/03-architecture.md`. Do not jump ah
 - **Layer 3 — observability:** live demo on the cluster, OpenTelemetry traces (one per email), agent run tracing, JSON logs, metrics, Grafana dashboards and alerts as code (ADR-018). *(done, 1.11)*
 - **Layer 4 — evals + red team in CI:** real-model evals and attacks with three repeats, OWASP ZAP passive scan, generated threat coverage table (ADR-020). *(done, 3.11)*
 - **Layer 5 — detection:** image digests on their own branch so main is protected (ADR-021); security events as metrics; detection rules as code with promtool tests; a watchdog for the monitoring stack; Alertmanager to WhatsApp through an alert-relay pod (ADR-022). *(done, 18.11; alerts verified on the phone 18.11)*
-- **Layer 6:** temporary cloud (also a stable webhook URL and Falco, deferred from Layer 5).
+- **Layer 6 — cloud:** an always-on spot server on AWS that heals itself, Terraform for everything, agent.efi-agent.dev over HTTPS, nightly backups to S3, Falco, security updates and an outside check (ADR-023). *(done, 19.11)*
 
 ## Conventions
 
@@ -91,7 +91,7 @@ Work strictly in the layers defined in `docs/03-architecture.md`. Do not jump ah
 
 ## Decided (do not reopen without asking)
 
-Python; LangGraph (ADR-002 alternatives: Claude Agent SDK, OpenAI Agents SDK); polling Gmail every minute in the MVP; Redis Streams; PostgreSQL RLS; four services split by key ownership; React; Sealed Secrets; temporary cloud = k3s on one AWS server via Terraform; WhatsApp via Meta Cloud API directly with a dedicated prepaid number; Google OAuth app stays in testing mode for now; rule-based email filtering; Hebrew-only UI for the MVP; demo mode with a demo Google account and fake data.
+Python; LangGraph (ADR-002 alternatives: Claude Agent SDK, OpenAI Agents SDK); polling Gmail every minute in the MVP; Redis Streams; PostgreSQL RLS; four services split by key ownership; React; Sealed Secrets; cloud = k3s on one always-on AWS spot server via Terraform (ADR-023, superseding ADR-009's temporary environment); WhatsApp via Meta Cloud API directly with a dedicated prepaid number; Google OAuth app stays in testing mode for now; rule-based email filtering; Hebrew-only UI for the MVP; demo mode with a demo Google account and fake data.
 
 Also decided (23.10, round two): two OAuth flows with the Gmail/Calendar callback on `google-gateway`; `agent` has no DB role; outbound email built from a template in `google-gateway`; stop code stored as HMAC with a pepper (superseded 25.10 by ADR-014: stop only from backup numbers + code, argon2id, plus a web pause button); `google-gateway` creates pending actions and `api` alone holds the Meta token; user deletion leaves only anonymized audit rows; skipped emails keep sender, subject and time only, for 7 days; `request_patterns` deferred (fixed anomaly rules in the MVP).
 
@@ -102,5 +102,7 @@ Also decided (2.11): the approval card shows the incoming email's sender, subjec
 Also decided (3.11): attacks and safety cases must pass every repeat, quality stays at 90%, verdicts come from code and not from another model; promptfoo and garak rejected for now (ADR-020).
 
 Also decided (17.11, Layer 5): digests on a deploy/k3d branch that Argo CD deploys; alerts go to WhatsApp (not Telegram); detections read a counter per security-event kind, not the database; Falco and a stable URL wait for Layer 6 (ADR-021, ADR-022).
+
+Also decided (18–19.11, Layer 6): always on, not temporary; domain efi-agent.dev (Cloudflare DNS, not proxied); spot in eu-central-1 with a price cap, m6g/m8g.medium because "unlimited" CPU credits are blocked on the account (AWS Support asked; t4g can return); no SIM, Meta's test number stays; Grafana closed to the internet; backups kept 14 days; the cloud alone polls the mailbox and sends alerts, k3d stays for local work (ADR-023).
 
 Still open: whether to add a separate "reader" LLM in addition to key separation (to discuss with the security mentor).

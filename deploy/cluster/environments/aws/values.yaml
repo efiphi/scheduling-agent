@@ -29,16 +29,9 @@ workloads:
   notifier:
     env:
       WEB_APP_URL: https://agent.efi-agent.dev/
-  # Off until the data moves (step 6.5): it sends to the owner's verified WhatsApp number,
-  # which this cluster's empty database does not have yet, so it refuses to start.
-  alert-relay:
-    replicas: 0
   google-gateway:
     env:
       GOOGLE_CONNECT_REDIRECT_URI: https://agent.efi-agent.dev/oauth/google/callback
 
-cronJobs:
-  # Off until the data moves here from k3d (step 6.5): two clusters polling the same demo
-  # mailbox would each answer the same email.
-  gmail-poll:
-    suspend: true
+# Since step 6.5 this cluster reads the demo mailbox and sends the owner's alerts; k3d does
+# neither (environments/k3d/settings.yaml).

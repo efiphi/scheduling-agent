@@ -5,3 +5,9 @@
 cronJobs:
   gmail-poll:
     suspend: true
+
+# The owner's WhatsApp alerts come from the cloud; a laptop cluster that sleeps would only
+# add noise (and its own copy of every alert).
+workloads:
+  alert-relay:
+    replicas: 0

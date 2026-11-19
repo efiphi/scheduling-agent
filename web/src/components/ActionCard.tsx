@@ -30,16 +30,17 @@ export function ActionCard({
       aria-labelledby={`action-${action.id}-title`}
       className={`flex flex-col gap-3.5 rounded-[var(--radius-card)] border bg-surface p-4 shadow-[var(--shadow-card)] ${border} ${expired ? "opacity-75" : ""}`}
     >
-      <header className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <IconTile name={kindIcon[action.kind]} />
-          <h2 id={`action-${action.id}-title`} className="text-base font-semibold">
+      {/* The validity sits under the title, so a long date never squeezes the title. */}
+      <header className="flex items-center gap-2.5">
+        <IconTile name={kindIcon[action.kind]} />
+        <div className="min-w-0">
+          <h2 id={`action-${action.id}-title`} className="text-base leading-snug font-semibold">
             <Link to={`/actions/${action.id}`} className="hover:text-accent">
               {actionKindLabel[action.kind]}
             </Link>
           </h2>
+          <p className="text-xs text-muted">{expired ? "פג" : `בתוקף עד ${formatDateTime(action.expiresAt)}`}</p>
         </div>
-        <p className="flex-none text-xs text-muted">{expired ? "פג" : `בתוקף עד ${formatDateTime(action.expiresAt)}`}</p>
       </header>
 
       {failed && (

@@ -24,24 +24,24 @@ export function ContactsPage() {
         onChange={(e) => setQuery(e.target.value)}
         placeholder="חיפוש לפי שם או מייל"
         aria-label="חיפוש אנשי קשר"
-        className="mb-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+        className="mb-2 w-full rounded-xl border border-line-strong bg-surface px-3 py-2"
       />
       {/* T29: changing an existing contact's address is an unusual request. */}
-      <p className="mb-4 text-sm text-slate-600">שינוי כתובת של איש קשר קיים דורש אימות נוסף.</p>
+      <p className="mb-4 text-sm text-muted">שינוי כתובת של איש קשר קיים דורש אימות נוסף.</p>
 
       {shown.length === 0 ? (
         <Empty>{contacts.length === 0 ? "הסוכן עוד לא מכיר אנשי קשר." : "לא נמצאו אנשי קשר."}</Empty>
       ) : (
         <ul className="space-y-2">
           {shown.map((c) => (
-            <li key={c.id} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3">
+            <li key={c.id} className="flex items-center justify-between gap-2 rounded-xl border border-line bg-surface p-3">
               <div>
                 {c.name ? (
                   <p className="font-medium">{c.name}</p>
                 ) : (
-                  <p className="font-medium text-amber-800">ממתין לשם</p>
+                  <p className="font-medium text-warn-ink">ממתין לשם</p>
                 )}
-                <bdi className="text-sm text-slate-700">{c.email}</bdi>
+                <bdi className="text-sm text-ink-soft">{c.email}</bdi>
               </div>
               <PendingButton>{c.name ? "עריכה" : "תן שם"}</PendingButton>
             </li>

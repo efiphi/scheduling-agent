@@ -5,7 +5,8 @@ import { useDataSource } from "../data/context";
 
 import { actionKindLabel, type IncomingEmail, type PendingAction } from "../domain/actions";
 import { formatDateTime } from "../lib/time";
-import { PendingButton } from "./ui";
+import { Icon, IconTile, PendingButton, type IconName } from "./ui";
+import { buttonClass } from "./styles";
 import { SlotTime } from "./SlotTime";
 
 // The card must allow a decision without opening another screen (docs/04-web-app.md).
@@ -21,55 +22,72 @@ export function ActionCard({
 }) {
   const expired = action.status === "expired";
   const failed = action.status === "failed";
-  const border = failed ? "border-red-400" : action.anomalyReason ? "border-amber-400" : "border-slate-200";
+  // Only what needs the owner's eye gets color: a failure, an unusual request.
+  const border = failed ? "border-danger-line" : action.anomalyReason ? "border-warn-line" : "border-line";
 
   return (
     <article
       aria-labelledby={`action-${action.id}-title`}
-      className={`rounded-xl border bg-white p-4 shadow-sm ${border} ${expired ? "opacity-75" : ""}`}
+      className={`flex flex-col gap-3.5 rounded-[var(--radius-card)] border bg-surface p-4 shadow-[var(--shadow-card)] ${border} ${expired ? "opacity-75" : ""}`}
     >
-      <header className="mb-3 flex items-baseline justify-between gap-2">
-        <h2 id={`action-${action.id}-title`} className="text-lg font-semibold">
-          <Link to={`/actions/${action.id}`}>{actionKindLabel[action.kind]}</Link>
-        </h2>
-        <p className="text-sm text-slate-600">
-          {expired ? "פג" : `בתוקף עד ${formatDateTime(action.expiresAt)}`}
-        </p>
+      {/* The validity sits under the title, so a long date never squeezes the title. */}
+      <header className="flex items-center gap-2.5">
+        <IconTile name={kindIcon[action.kind]} />
+        <div className="min-w-0">
+          <h2 id={`action-${action.id}-title`} className="text-base leading-snug font-semibold">
+            <Link to={`/actions/${action.id}`} className="hover:text-accent">
+              {actionKindLabel[action.kind]}
+            </Link>
+          </h2>
+          <p className="text-xs text-muted">{expired ? "פג" : `בתוקף עד ${formatDateTime(action.expiresAt)}`}</p>
+        </div>
       </header>
 
       {failed && (
         // E13: no failure disappears silently; the reason is in plain language.
-        <p role="alert" className="mb-3 rounded-lg bg-red-50 p-2 text-sm text-red-900">
-          <span className="font-semibold">נכשל: </span>
-          {action.failureReason ?? "הביצוע נכשל."}
+        <p role="alert" className="flex gap-2.5 rounded-xl bg-danger-bg px-3 py-2.5 text-sm leading-relaxed text-danger">
+          <Icon name="warning" className="mt-0.5 size-[18px] flex-none" />
+          <span>
+            <span className="font-semibold">נכשל: </span>
+            {action.failureReason ?? "הביצוע נכשל."}
+          </span>
         </p>
       )}
 
       {expired && (
         // E7: an expired action is locked; it can only go back to the queue as a new pending action.
-        <p role="status" className="mb-3 rounded-lg bg-slate-100 p-2 text-sm text-slate-800">
+        <p role="status" className="rounded-xl bg-sunken px-3 py-2.5 text-sm text-ink-soft">
           הפעולה פגה. אפשר להחזיר אותה לתור.
         </p>
       )}
 
       {action.anomalyReason && (
-        <p role="note" className="mb-3 rounded-lg bg-amber-50 p-2 text-sm text-amber-900">
-          <span className="font-semibold">בקשה חריגה: </span>
-          {action.anomalyReason}
+        <p role="note" className="flex gap-2.5 rounded-xl bg-warn-bg px-3 py-2.5 text-sm leading-relaxed text-warn-ink">
+          <Icon name="warning" className="mt-0.5 size-[18px] flex-none text-warn-icon" />
+          <span>
+            <span className="font-semibold">בקשה חריגה: </span>
+            {action.anomalyReason}
+          </span>
         </p>
       )}
 
       {action.incoming && <IncomingEmailDetails email={action.incoming} />}
 
       {action.recipients.length > 0 && (
-        <section aria-label="נמענים" className="mb-3">
-          <ul className="space-y-1">
+        <section aria-label="נמענים" className="flex flex-col gap-2">
+          <p className="text-[0.8125rem] text-muted">נמענים</p>
+          <ul className="flex flex-wrap gap-2">
             {action.recipients.map((r) => (
-              <li key={r.email} className="flex flex-wrap items-center gap-2">
+              <li
+                key={r.email}
+                className={`flex flex-wrap items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[0.8125rem] ${
+                  r.isNew ? "border-danger-line bg-danger-bg" : "border-line"
+                }`}
+              >
                 {r.contactName && <span className="font-medium">{r.contactName}</span>}
-                <bdi className="text-slate-700">{r.email}</bdi>
+                <bdi className={r.contactName ? "text-muted" : ""}>{r.email}</bdi>
                 {r.isNew && (
-                  <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">נמען חדש</span>
+                  <span className="rounded-md bg-danger px-1.5 py-px text-[0.6875rem] font-semibold text-white">נמען חדש</span>
                 )}
               </li>
             ))}
@@ -78,10 +96,11 @@ export function ActionCard({
       )}
 
       {action.slots.length > 0 && (
-        <section aria-label="מועדים" className="mb-3">
-          <ul className="space-y-1">
+        <section aria-label="מועדים" className="flex flex-col gap-2">
+          <p className="text-[0.8125rem] text-muted">מועדים</p>
+          <ul className="flex flex-col gap-2">
             {action.slots.map((s) => (
-              <li key={s.start}>
+              <li key={s.start} className="rounded-xl border border-line px-3 py-2.5 text-[0.9375rem] font-medium">
                 <SlotTime slot={s} />
               </li>
             ))}
@@ -90,18 +109,21 @@ export function ActionCard({
       )}
 
       {action.draft && (
-        <details className="mb-3">
-          <summary className="cursor-pointer text-sm text-slate-700">הטיוטה המלאה</summary>
-          <p className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 p-2 text-sm" dir="auto">
+        <details className="group rounded-xl border border-line">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-sm font-medium">
+            הטיוטה המלאה
+            <Icon name="chevron" className="size-4 text-muted transition-transform group-open:-rotate-90" />
+          </summary>
+          <p className="border-t border-line-soft px-3 py-3 text-sm leading-relaxed whitespace-pre-wrap" dir="auto">
             {action.draft}
           </p>
         </details>
       )}
 
       {action.flaggedSentences.length > 0 && (
-        <section aria-label="משפטים שחורגים מתיאום" className="mb-3 text-sm">
-          <p className="font-semibold text-amber-900">משפטים שחורגים מתיאום מועדים:</p>
-          <ul className="list-disc ps-5">
+        <section aria-label="משפטים שחורגים מתיאום" className="rounded-xl bg-warn-bg px-3 py-2.5 text-sm text-warn-ink">
+          <p className="font-semibold">משפטים שחורגים מתיאום מועדים:</p>
+          <ul className="mt-1 list-disc ps-5">
             {action.flaggedSentences.map((s) => (
               <li key={s} dir="auto">
                 {s}
@@ -116,26 +138,36 @@ export function ActionCard({
   );
 }
 
+const kindIcon: Record<PendingAction["kind"], IconName> = {
+  reply_with_slots: "mail",
+  create_event: "calendar",
+  reschedule_event: "calendar",
+  cancel_event: "cross",
+  block_time: "calendar",
+};
+
 // The email this action answers, so the decision does not need another screen (ADR-019).
 // All of it is plain text (T19, T31).
 function IncomingEmailDetails({ email }: { email: IncomingEmail }) {
   return (
-    <section aria-label="המייל שהתקבל" className="mb-3 rounded-lg bg-slate-50 p-3 text-sm">
+    <section aria-label="המייל שהתקבל" className="flex flex-col gap-1.5 rounded-2xl bg-sunken p-3 text-sm">
       <p>
-        <span className="font-semibold">מאת: </span>
-        <bdi>{email.sender}</bdi>
+        <span className="text-muted">מאת </span>
+        <bdi className="font-medium">{email.sender}</bdi>
       </p>
-      <p dir="auto">
-        <span className="font-semibold">נושא: </span>
+      <p dir="auto" className="font-medium">
+        <span className="sr-only">נושא: </span>
         {email.subject}
       </p>
       {email.summary ? (
         <>
-          <p className="mt-2 text-xs text-slate-600">תקציר של הסוכן (נכתב מתוך תוכן חיצוני, לא מאומת):</p>
-          <p dir="auto">{email.summary}</p>
+          <p className="mt-1 text-xs text-muted">תקציר של הסוכן · מתוך תוכן חיצוני, לא מאומת</p>
+          <p dir="auto" className="leading-relaxed">
+            {email.summary}
+          </p>
         </>
       ) : (
-        <p className="mt-2 text-slate-700">אין תקציר למייל הזה. כדאי לקרוא אותו במקור.</p>
+        <p className="mt-1 text-ink-soft">אין תקציר למייל הזה. כדאי לקרוא אותו במקור.</p>
       )}
     </section>
   );
@@ -173,18 +205,18 @@ function ActionButtons({
   return (
     <>
       {error && (
-        <p role="alert" className="mb-2 text-sm text-red-800">
+        <p role="alert" className="rounded-xl bg-danger-bg px-3 py-2 text-sm text-danger">
           {error}
         </p>
       )}
       <div className="flex gap-2">
-        <button type="button" disabled={busy} onClick={() => void decide("approved")} className="flex-1 rounded-lg bg-blue-700 py-2 text-white disabled:opacity-50">
+        <button type="button" disabled={busy} onClick={() => void decide("approved")} className={`${buttonClass.primary} flex-[2] px-3`}>
           אשר
         </button>
-        <button type="button" disabled title="עריכה תגיע אחרי ה-MVP" className="flex-1 rounded-lg border border-slate-300 py-2 disabled:opacity-50">
+        <button type="button" disabled title="עריכה תגיע אחרי ה-MVP" className={`${buttonClass.secondary} flex-1 px-3`}>
           ערוך
         </button>
-        <button type="button" disabled={busy} onClick={() => void decide("rejected")} className="flex-1 rounded-lg border border-slate-300 py-2 disabled:opacity-50">
+        <button type="button" disabled={busy} onClick={() => void decide("rejected")} className={`${buttonClass.danger} flex-1 px-3`}>
           דחה
         </button>
       </div>

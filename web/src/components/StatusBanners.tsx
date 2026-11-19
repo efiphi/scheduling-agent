@@ -42,15 +42,15 @@ export function StatusBanners({ account }: { account: Account | null }) {
 }
 
 const tones = {
-  danger: "bg-red-700 text-white",
-  warning: "bg-amber-100 text-amber-950",
-  muted: "bg-slate-200 text-slate-900",
+  danger: "bg-danger text-white",
+  warning: "bg-warn-bg text-warn-ink",
+  muted: "bg-line text-ink",
 };
 
 function Banner({ tone, label, children }: { tone: keyof typeof tones; label: string; children: React.ReactNode }) {
   return (
-    <section role="alert" aria-label={label} className={`${tones[tone]} px-4 py-3 text-sm`}>
-      <div className="mx-auto flex max-w-xl flex-wrap items-center justify-between gap-2">{children}</div>
+    <section role="alert" aria-label={label} className={`${tones[tone]} px-5 py-3 text-sm`}>
+      <div className="mx-auto flex max-w-xl flex-wrap items-center justify-between gap-x-3 gap-y-2">{children}</div>
     </section>
   );
 }

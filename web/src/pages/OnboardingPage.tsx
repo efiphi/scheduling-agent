@@ -58,26 +58,26 @@ export function OnboardingPage() {
   return (
     <section>
       <PageTitle>הגדרה ראשונית</PageTitle>
-      <p className="mb-4 text-sm text-slate-600" aria-live="polite">
+      <p className="mb-4 text-sm text-muted" aria-live="polite">
         שלב {index + 1} מתוך {steps.length}
       </p>
-      <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4">
+      <div className="mb-6 rounded-xl border border-line bg-surface p-4">
         <h2 className="mb-2 text-lg font-semibold">{step?.title}</h2>
-        <div className="text-slate-700">{step?.body}</div>
+        <div className="text-ink-soft">{step?.body}</div>
       </div>
       <div className="flex justify-between">
         <button
           type="button"
           onClick={() => setIndex((i) => i - 1)}
           disabled={index === 0}
-          className="rounded-lg border border-slate-300 px-4 py-2 disabled:opacity-40"
+          className="min-h-11 rounded-2xl border border-line-strong bg-surface px-5 font-medium hover:bg-sunken disabled:opacity-40"
         >
           הקודם
         </button>
         {isLast ? (
           <PendingButton tone="primary">סיום</PendingButton>
         ) : (
-          <button type="button" onClick={() => setIndex((i) => i + 1)} className="rounded-lg bg-blue-700 px-4 py-2 text-white">
+          <button type="button" onClick={() => setIndex((i) => i + 1)} className="min-h-11 rounded-2xl bg-accent px-5 font-semibold text-white hover:bg-accent-hover">
             הבא
           </button>
         )}

@@ -8,10 +8,10 @@ export function AppLayout() {
   const account = useLoaderData<Account | null>();
 
   return (
-    <div className="min-h-dvh bg-slate-50 text-slate-900">
+    <div className="min-h-dvh bg-canvas text-ink">
       <StatusBanners account={account} />
       {/* Bottom padding keeps content clear of the fixed bottom nav. */}
-      <main className="mx-auto max-w-xl px-4 pt-6 pb-24">
+      <main className="mx-auto max-w-xl px-5 pt-7 pb-28">
         <Outlet />
       </main>
       <BottomNav />

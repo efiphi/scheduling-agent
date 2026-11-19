@@ -4,6 +4,9 @@ import { createBrowserRouter, RouterProvider } from "react-router";
 
 import { createRoutes } from "./app/routes";
 import { createHttpSource } from "./data/httpSource";
+// Heebo, bundled with the app (no request to Google; the CSP keeps font-src 'self').
+// One variable file per script, and the browser loads only the scripts a page uses.
+import "@fontsource-variable/heebo";
 import "./index.css";
 
 const root = document.getElementById("root");

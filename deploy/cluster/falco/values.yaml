@@ -1,0 +1,59 @@
+# Falco (chart falcosecurity/falco), the cloud server only (step 6.6, ADR-023): watches what
+# every process on the server does, through the kernel (modern eBPF), and flags what an
+# attacker does after getting in, e.g. a shell inside a container, a read of /etc/shadow, a
+# write under /etc, an unexpected outbound connection from a system binary. k3d runs inside
+# Docker on a laptop, where the probe cannot see the host the same way.
+#
+# What it reports reaches the owner like every other detection (ADR-022): a counter per rule
+# (metrics below), a Prometheus rule (detections/rules.yml), Alertmanager, WhatsApp.
+
+# Pinned by digest (T20): the digest of 0.45.2's multi-arch image.
+image:
+  registry: docker.io
+  repository: falcosecurity/falco
+  tag: "0.45.2@sha256:1562a643953f938e02f47319b5214d93a235f11f646d60e9b8a516fd5a64698e"
+
+# The kernel's own eBPF support, built into Falco: no kernel module, no driver download.
+# Not privileged: only the kernel capabilities the probe needs (BPF, PERFMON, SYS_PTRACE,
+# SYS_RESOURCE...), so a flaw in Falco is not root on the host.
+driver:
+  kind: modern_ebpf
+  modernEbpf:
+    leastPrivileged: true
+
+# No falcoctl: it would download rules and plugins from the internet while running. The
+# image already carries Falco's default rules and the container plugin; new rules arrive
+# with a new, pinned image, through git.
+falcoctl:
+  artifact:
+    install: {enabled: false}
+    follow: {enabled: false}
+
+# Container names and images on each event, from k3s's containerd (the chart's default
+# socket list includes /run/k3s/containerd/containerd.sock). No Kubernetes collector: it
+# needs another service and falcoctl.
+collectors:
+  kubernetes: {enabled: false}
+
+falco:
+  json_output: true
+  # Log notices and above; the noise below stays out of Loki.
+  priority: notice
+
+# A Prometheus counter per rule that fired, read every minute by the Prometheus server.
+metrics:
+  enabled: true
+  interval: 1m
+  rulesCountersEnabled: true
+  resourceUtilizationEnabled: true
+  convertMemoryToMB: true
+  service:
+    create: true
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8765"
+
+# The server has one core and ~600Mi to spare.
+resources:
+  requests: {cpu: 10m, memory: 64Mi}
+  limits: {memory: 256Mi}

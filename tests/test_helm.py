@@ -6,6 +6,7 @@ render the chart and check every pod. Needs the helm binary; skipped without it
 """
 
 import hashlib
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -591,17 +592,23 @@ def test_the_cloud_root_takes_shared_apps_only_never_k3ds() -> None:
         "secrets-aws.yaml",
         "secrets-aws-observability.yaml",
         "traefik-config.yaml",
+        "falco.yaml",
     }
     # The same Application names as k3d, so the two clusters read alike.
+    # The same Application names as k3d, so the two clusters read alike.
     names = {
-        yaml.safe_load(p.read_text())["metadata"]["name"]
+        doc["metadata"]["name"]
         for p in (ROOT / own["path"]).glob("*.yaml")
+        for doc in yaml.safe_load_all(p.read_text())
+        if doc["kind"] == "Application"
     }
     assert names == {
         "scheduling-agent",
         "secrets-aws",
         "secrets-aws-observability",
         "traefik-config",
+        "falco",
+        "falco-config",
     }
 
 
@@ -717,3 +724,26 @@ def test_every_http_process_gets_minutes_to_start_before_liveness_counts(
                 startup = c["startupProbe"]
                 assert startup["periodSeconds"] * startup["failureThreshold"] >= 300, name
                 assert c["livenessProbe"]["timeoutSeconds"] >= 5, name
+
+
+def test_t20_t21_falco_is_pinned_offline_and_not_privileged() -> None:
+    values = yaml.safe_load((ROOT / "deploy/cluster/falco/values.yaml").read_text())
+    # T20: the image by digest, and nothing downloaded while it runs (no falcoctl).
+    assert re.fullmatch(r"[0-9.]+@sha256:[0-9a-f]{64}", values["image"]["tag"])
+    assert values["falcoctl"]["artifact"]["install"]["enabled"] is False
+    assert values["falcoctl"]["artifact"]["follow"]["enabled"] is False
+    # T21: kernel capabilities only, not a privileged container.
+    assert values["driver"] == {"kind": "modern_ebpf", "modernEbpf": {"leastPrivileged": True}}
+    # Its findings reach the owner: Prometheus reads the counter per rule.
+    assert values["metrics"]["enabled"] is True
+    assert values["metrics"]["service"]["annotations"]["prometheus.io/scrape"] == "true"
+    # Its namespace takes nothing but Prometheus on the metrics port.
+    policies = list(
+        yaml.safe_load_all(
+            (ROOT / "deploy/cluster/falco/manifests/networkpolicies.yaml").read_text()
+        )
+    )
+    assert {p["metadata"]["name"] for p in policies} == {
+        "default-deny-ingress",
+        "metrics-from-prometheus",
+    }

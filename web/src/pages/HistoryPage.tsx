@@ -20,12 +20,12 @@ export function HistoryPage() {
   return (
     <section>
       <PageTitle>היסטוריה</PageTitle>
-      <label className="mb-4 flex items-center gap-2 text-sm">
+      <label className="mb-5 flex items-center gap-3 text-sm font-medium">
         ערוץ
         <select
           value={channel}
           onChange={(e) => setChannel(e.target.value as Channel | "all")}
-          className="rounded-lg border border-slate-300 bg-white px-2 py-1"
+          className="min-h-11 rounded-xl border border-line-strong bg-surface px-3 text-[0.9375rem] font-normal"
         >
           <option value="all">הכל</option>
           {(Object.keys(channelLabel) as Channel[]).map((c) => (
@@ -39,15 +39,17 @@ export function HistoryPage() {
       {shown.length === 0 ? (
         <Empty>עדיין אין פעולות בהיסטוריה.</Empty>
       ) : (
-        <ol className="space-y-3">
+        <ol className="flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface">
           {shown.map((e) => (
-            <li key={e.id} className="rounded-xl border border-slate-200 bg-white p-3">
-              <p className="text-sm text-slate-600">
+            <li key={e.id} className="flex flex-col gap-0.5 border-b border-line-soft p-3.5 last:border-b-0">
+              <p dir="auto" className="text-[0.9375rem] font-semibold">
+                {e.summary}
+              </p>
+              <p className="text-[0.8125rem] text-muted">
                 {formatDateTime(e.at)} · {historyKindLabel(e.kind)} · {channelLabel[e.channel]}
               </p>
-              <p dir="auto">{e.summary}</p>
               {(e.decidedBy || e.contactName) && (
-                <p className="text-sm text-slate-600">
+                <p className="text-[0.8125rem] text-muted">
                   {e.contactName && <span>איש קשר: {e.contactName}. </span>}
                   {e.decidedBy && <span>אישר: {e.decidedBy}</span>}
                 </p>

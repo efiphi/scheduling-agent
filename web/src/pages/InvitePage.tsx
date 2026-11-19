@@ -8,11 +8,11 @@ export function InvitePage() {
   return (
     <section>
       <PageTitle>הזמנה</PageTitle>
-      <p className="mb-4 text-slate-700">ההזמנה לא נמצאה, פגה או כבר נוצלה.</p>
-      <p className="mb-6 text-sm text-slate-600">
+      <p className="mb-4 text-ink-soft">ההזמנה לא נמצאה, פגה או כבר נוצלה.</p>
+      <p className="mb-6 text-sm text-muted">
         כל הזמנה מיועדת לכתובת מייל אחת. התחברות עם חשבון אחר נדחית.
       </p>
-      <Link to="/login" className="text-blue-700 underline">
+      <Link to="/login" className="text-accent underline">
         למסך ההתחברות
       </Link>
     </section>

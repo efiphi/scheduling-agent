@@ -18,7 +18,7 @@ export function AdminUsersPage() {
     <section>
       <PageTitle>ניהול משתמשים</PageTitle>
       <Card title="הזמנת משתמש">
-        <p className="mb-3 text-sm text-slate-700">ההזמנה חד-פעמית, עם תוקף, וקשורה לכתובת המייל שתזין (T14).</p>
+        <p className="mb-3 text-sm text-ink-soft">ההזמנה חד-פעמית, עם תוקף, וקשורה לכתובת המייל שתזין (T14).</p>
         <PendingButton tone="primary">שליחת הזמנה</PendingButton>
       </Card>
       <Card title="משתמשים">

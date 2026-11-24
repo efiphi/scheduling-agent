@@ -81,7 +81,7 @@ def test_login_state_works_once(s: Setup) -> None:
     again = s.client.get(
         "/auth/google/callback", params={"state": state, "code": "c"}, follow_redirects=False
     )
-    assert again.status_code == 400
+    assert again.headers["location"].endswith("/login?error=failed")
     assert len(s.login.exchanged) == 1
 
 
@@ -92,7 +92,7 @@ def test_login_csrf_a_callback_we_did_not_start_is_refused(
     s: Setup, params: dict[str, str]
 ) -> None:
     response = s.client.get("/auth/google/callback", params=params, follow_redirects=False)
-    assert response.status_code == 400
+    assert response.headers["location"].endswith("/login?error=failed")
     assert COOKIE not in response.headers.get("set-cookie", "")
     assert s.login.exchanged == []
 
@@ -110,7 +110,9 @@ def test_t14_only_invited_verified_accounts_get_in(
     response = s.client.get(
         "/auth/google/callback", params={"state": state, "code": "c"}, follow_redirects=False
     )
-    assert response.status_code in (400, 403)
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("http://localhost:5173/login?error=")
+    assert COOKIE not in response.headers.get("set-cookie", "")
     assert s.sessions.sessions == {}
 
 

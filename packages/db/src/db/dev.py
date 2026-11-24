@@ -44,14 +44,40 @@ def create_user(email: str) -> UUID:
         return UUID(str(user_id))
 
 
+def make_admin(email: str) -> UUID:
+    """Give an existing user the admin role, who may invite others (UC-A6).
+
+    Only the owner can do this: no service role may change users.is_admin (migration 0001),
+    so a bug or an attacker in the api cannot make anyone an admin.
+    """
+    password = os.environ.get("OWNER_DB_PASSWORD")
+    if not password:
+        raise SystemExit("Set OWNER_DB_PASSWORD (see deploy/compose/.env).")
+    engine = make_engine("scheduling_owner", password)
+    with engine.begin() as conn:
+        found = conn.execute(
+            text(
+                "UPDATE app.users SET is_admin = true WHERE email = lower(:email) RETURNING user_id"
+            ),
+            {"email": email},
+        ).scalar_one_or_none()
+    if found is None:
+        raise SystemExit("No such user.")
+    return UUID(str(found))
+
+
 def main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(prog="python -m db.dev")
     commands = parser.add_subparsers(dest="command", required=True)
     create = commands.add_parser("create-user", help="create a user (or show the existing id)")
     create.add_argument("--email", required=True)
+    admin = commands.add_parser("make-admin", help="let an existing user invite others")
+    admin.add_argument("--email", required=True)
     args = parser.parse_args(argv)
     if args.command == "create-user":
         print(create_user(args.email))
+    elif args.command == "make-admin":
+        print(make_admin(args.email))
 
 
 if __name__ == "__main__":

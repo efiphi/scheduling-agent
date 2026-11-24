@@ -1,4 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useLoaderData, useLocation } from "react-router";
+
+import { GoogleConnectButton } from "../components/GoogleConnect";
+import type { Account } from "../domain/account";
+import { googleOutcome } from "../lib/google";
 
 import { Card, Field, Icon, Notice, PendingButton } from "../components/ui";
 import { buttonClass } from "../components/styles";
@@ -12,6 +17,8 @@ const LOGIN_URL = "/api/auth/google/login";
 // and resuming the agent, need a fresh Google login: a live session alone is not enough.
 export function SecurityPage() {
   const source = useDataSource();
+  const account = useLoaderData<Account | null>();
+  const outcome = googleOutcome(useLocation().search);
   const [status, setStatus] = useState<SecurityStatus | null>(null);
   const [message, setMessage] = useState<string>();
   const [needsLogin, setNeedsLogin] = useState(false);
@@ -102,6 +109,18 @@ export function SecurityPage() {
           </>
         )}
       </section>
+
+      <Card title="Google">
+        {outcome && <Notice tone={outcome.tone}>{outcome.text}</Notice>}
+        <p className="mb-3 text-sm text-ink-soft">
+          {account?.google === "connected"
+            ? "המייל והיומן מחוברים. במצב בדיקה של Google החיבור פג אחרי 7 ימים, ואז מחברים מחדש."
+            : account?.google === "expired"
+              ? "החיבור ל-Google פג. הסוכן לא קורא מיילים עד שתחבר מחדש."
+              : "Google לא מחובר. הסוכן לא יכול לקרוא מיילים או לבדוק את היומן."}
+        </p>
+        <GoogleConnectButton status={account?.google ?? "disconnected"} returnTo="settings/security" />
+      </Card>
 
       <Card title="ווטסאפ">
         {status?.whatsappVerified ? (

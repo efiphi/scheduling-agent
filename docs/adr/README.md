@@ -27,3 +27,4 @@ Each significant decision is recorded as a short ADR: what was decided, why, wha
 | [021](021-environment-branch.md) | Image digests on their own branch, so main can be protected | Accepted |
 | [022](022-detections-and-alerts.md) | Detection rules as code, alerts to WhatsApp | Accepted |
 | [023](023-always-on-cloud-server.md) | An always-on cloud server: one spot instance that heals itself | Accepted |
+| [024](024-invites-and-self-serve-onboarding.md) | Joining by invite link, and connecting Google from the web app | Accepted |

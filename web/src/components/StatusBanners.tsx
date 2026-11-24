@@ -1,3 +1,5 @@
+import { Link } from "react-router";
+
 import type { Account } from "../domain/account";
 import { useOnline } from "../lib/online";
 import { PendingButton } from "./ui";
@@ -21,7 +23,9 @@ export function StatusBanners({ account }: { account: Account | null }) {
         // E13: in Google's testing mode the connection expires every 7 days.
         <Banner tone="warning" label="החיבור ל-Google">
           <p>{account.google === "expired" ? "החיבור ל-Google פג." : "Google לא מחובר."} הסוכן לא יכול לקרוא מיילים או לבדוק את היומן.</p>
-          <PendingButton>חיבור מחדש</PendingButton>
+          <Link to="/settings/security" className="font-semibold underline">
+            לחיבור מחדש
+          </Link>
         </Banner>
       )}
 

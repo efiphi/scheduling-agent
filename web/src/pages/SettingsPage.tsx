@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import { Link, useLoaderData } from "react-router";
+import { Link, useLoaderData, useRouteLoaderData } from "react-router";
 
 import { Card, Field, PendingButton } from "../components/ui";
-import type { Settings, Tracked } from "../domain/account";
+import type { Account, Settings, Tracked } from "../domain/account";
 import { channelLabel } from "../domain/labels";
 import { formatDateTime } from "../lib/time";
 import { PageTitle } from "./PageTitle";
@@ -29,6 +29,7 @@ function changedHint(t: Tracked<unknown>): string | undefined {
 
 export function SettingsPage() {
   const settings = useLoaderData<Settings | null>();
+  const account = useRouteLoaderData<Account | null>("app");
 
   return (
     <section>
@@ -53,6 +54,11 @@ export function SettingsPage() {
       <Link to="/settings/security" className="block rounded-xl border border-line bg-surface p-4 font-semibold text-accent">
         אבטחה: השהיית הסוכן, קוד עצירה, חשבונות מחוברים ←
       </Link>
+      {account?.isAdmin && (
+        <Link to="/admin/users" className="mt-3 block rounded-xl border border-line bg-surface p-4 font-semibold text-accent">
+          ניהול משתמשים: הזמנות ומשתמשים ←
+        </Link>
+      )}
     </section>
   );
 }

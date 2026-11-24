@@ -257,6 +257,35 @@ class BackupNumber(Base):
     created_at: Mapped[datetime] = _created_at()
 
 
+class Invite(Base):
+    """A single-use, expiring link to join, bound to one email address (UC-A1, T14).
+
+    user_id is the admin who sent it. Only the SHA-256 of the link's token is stored, and
+    only app.accept_invite marks an invite used (migration 0007).
+    """
+
+    __tablename__ = "invites"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="invites_token_hash_key"),
+        CheckConstraint("email = lower(email)", name="invites_email_lowercase"),
+        CheckConstraint("token_hash ~ '^[0-9a-f]{64}$'", name="invites_token_hash_sha256"),
+    )
+
+    invite_id: Mapped[UUID] = _uuid_pk()
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
+    )
+    email: Mapped[str] = mapped_column(Text, nullable=False)
+    token_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    used_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="SET NULL")
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _created_at()
+
+
 class UserQuestion(Base):
     """The agent could not decide and asks the user, instead of guessing (UC-M7).
 

@@ -21,7 +21,7 @@ This table says what is checked. Whether it passes is reported by CI.
 | T11 | אובדן או גניבה של הטלפון | 5 |  |  |
 | T12 | הנדסה חברתית מול המשתמש |  |  | A person is the target, so code cannot prove the result. What code can do is covered under T5 and E2: new recipients are tagged and full addresses shown. |
 | T13 | דליפה בין משתמשים (cross-tenant) | 22 |  |  |
-| T14 | ניצול לרעה של הזמנה | 1 |  |  |
+| T14 | ניצול לרעה של הזמנה | 17 |  |  |
 | T15 | סוכן זדוני או פרוץ בתיאום בין סוכנים (שלב 2) |  | 1 |  |
 | T16 | גניבת טוקני OAuth | 9 |  |  |
 | T17 | סודות בריפו הציבורי | 4 |  |  |
@@ -29,7 +29,7 @@ This table says what is checked. Whether it passes is reported by CI.
 | T19 | Stored XSS באפליקציה הוובית | 4 |  |  |
 | T20 | שרשרת אספקה | 5 |  |  |
 | T21 | הגדרות Kubernetes חלשות | 10 |  |  |
-| T22 | דליפת מידע דרך לוגים ומעקב | 11 |  |  |
+| T22 | דליפת מידע דרך לוגים ומעקב | 12 |  |  |
 | T23 | חשיפה לספק מודל השפה | 1 |  |  |
 | T24 | הצפת מיילים (denial of wallet) | 9 |  |  |
 | T25 | לולאה בין סוכנים או מענים אוטומטיים | 3 |  |  |

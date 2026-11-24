@@ -36,7 +36,9 @@ class Identity:
 
 
 class GoogleLogin(Protocol):
-    def authorization_url(self, state: str, code_verifier: str) -> str: ...
+    def authorization_url(
+        self, state: str, code_verifier: str, login_hint: str | None = None
+    ) -> str: ...
 
     def exchange(self, code: str, code_verifier: str) -> Identity: ...
 
@@ -54,7 +56,9 @@ class GoogleIdentityLogin:
         self._certs: dict[str, str] = {}
         self._certs_fetched = 0.0
 
-    def authorization_url(self, state: str, code_verifier: str) -> str:
+    def authorization_url(
+        self, state: str, code_verifier: str, login_hint: str | None = None
+    ) -> str:
         params = {
             "client_id": self._client_id,
             "redirect_uri": self._redirect_uri,
@@ -65,6 +69,9 @@ class GoogleIdentityLogin:
             "code_challenge_method": "S256",
             "prompt": "select_account",
         }
+        if login_hint:
+            # An invite is for one address: suggest that account in Google's chooser.
+            params["login_hint"] = login_hint
         return f"{AUTH_URI}?{urlencode(params)}"
 
     def exchange(self, code: str, code_verifier: str) -> Identity:

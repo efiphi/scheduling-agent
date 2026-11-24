@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 from api.google_login import Identity, LoginError
 from api.sessions import LoginState, Session, SessionData, new_token
-from api.store import Action, ApproveResult, Question, User
+from api.store import Action, AdminUser, ApproveResult, Invite, Question, User
 
 USER_EMAIL = "demo-user@example.com"
 HASH = "sha256:" + "a" * 64
@@ -17,8 +17,12 @@ HASH = "sha256:" + "a" * 64
 class FakeLogin:
     identity: Identity | LoginError = field(default_factory=lambda: Identity(USER_EMAIL, True))
     exchanged: list[tuple[str, str]] = field(default_factory=list)
+    hints: list[str | None] = field(default_factory=list)
 
-    def authorization_url(self, state: str, code_verifier: str) -> str:
+    def authorization_url(
+        self, state: str, code_verifier: str, login_hint: str | None = None
+    ) -> str:
+        self.hints.append(login_hint)
         return f"https://accounts.example/auth?state={state}"
 
     def exchange(self, code: str, code_verifier: str) -> Identity:
@@ -75,10 +79,14 @@ class FakeStore:
     stop_hashes: dict[UUID, str] = field(default_factory=dict)
     paused: list[tuple[UUID, str]] = field(default_factory=list)
     events: list[tuple[UUID | None, str]] = field(default_factory=list)
+    # token hash -> (admin, invite); mirrors migration 0007's rules
+    invite_rows: dict[str, tuple[UUID, Invite]] = field(default_factory=dict)
 
-    def add_user(self, email: str = USER_EMAIL, status: str = "active") -> UUID:
+    def add_user(
+        self, email: str = USER_EMAIL, status: str = "active", *, is_admin: bool = False
+    ) -> UUID:
         user_id = uuid4()
-        self.users[user_id] = User(user_id, email, status, False)
+        self.users[user_id] = User(user_id, email, status, is_admin)
         return user_id
 
     def add_action(self, user_id: UUID, *, expires_in: timedelta = timedelta(hours=4)) -> UUID:
@@ -203,6 +211,53 @@ class FakeStore:
 
     def security_event(self, user_id: UUID | None, kind: str, details: dict[str, Any]) -> None:
         self.events.append((user_id, kind))
+
+    # --- Invites ----------------------------------------------------------------------
+
+    def _live(self, invite: Invite) -> bool:
+        return invite.status == "pending" and invite.expires_at > datetime.now(UTC)
+
+    def create_invite(
+        self, admin_id: UUID, email: str, token_hash: str, expires_at: datetime
+    ) -> Invite | None:
+        if not self.users[admin_id].is_admin:
+            return None
+        invite = Invite(uuid4(), email.lower(), "pending", expires_at, datetime.now(UTC))
+        self.invite_rows[token_hash] = (admin_id, invite)
+        return invite
+
+    def invites(self, admin_id: UUID) -> list[Invite]:
+        return [i for a, i in self.invite_rows.values() if a == admin_id]
+
+    def revoke_invite(self, admin_id: UUID, invite_id: UUID) -> bool:
+        for h, (a, i) in self.invite_rows.items():
+            if a == admin_id and i.invite_id == invite_id and i.status == "pending":
+                self.invite_rows[h] = (a, Invite(**{**i.__dict__, "status": "revoked"}))
+                return True
+        return False
+
+    def invite_email(self, token_hash: str) -> str | None:
+        found = self.invite_rows.get(token_hash)
+        return found[1].email if found and self._live(found[1]) else None
+
+    def accept_invite(self, token_hash: str, email: str) -> UUID | None:
+        found = self.invite_rows.get(token_hash)
+        if not found or not self._live(found[1]) or found[1].email != email.lower():
+            return None
+        if self.find_user(email.lower()) is not None:
+            return None
+        admin, invite = found
+        self.invite_rows[token_hash] = (admin, Invite(**{**invite.__dict__, "status": "used"}))
+        return self.add_user(email.lower())
+
+    def admin_users(self, admin_id: UUID) -> list[AdminUser]:
+        if not self.users[admin_id].is_admin:
+            return []
+        now = datetime.now(UTC)
+        return [
+            AdminUser(u.email, u.status, u.is_admin, u.user_id in self.numbers, "connected", now)
+            for u in self.users.values()
+        ]
 
 
 @dataclass

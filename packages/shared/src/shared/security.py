@@ -47,6 +47,8 @@ KINDS: dict[str, tuple[str, ...]] = {
     "google_token_rejected": ("E13",),
     # Volume
     "email_rate_limited": ("T24",),
+    # Web login
+    "login_not_invited": ("T14",),
 }
 UNLISTED = "unlisted"
 

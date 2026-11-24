@@ -32,6 +32,9 @@ ABSOLUTE_SECONDS = 12 * 3600
 
 class LoginState(StrictModel):
     code_verifier: str
+    # Set when the login started from an invite link: the SHA-256 of its token, never the
+    # token itself (UC-A1, T14).
+    invite_hash: str | None = None
 
 
 class SessionData(StrictModel):

@@ -14,16 +14,26 @@ import secrets
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field, SecretStr
 from redis import Redis
 
 from api.google_login import GoogleLogin, LoginError
+from api.invites import (
+    INVITE_LIFETIME,
+    InviteCreateIn,
+    InviteTokenIn,
+    email_hint,
+    invite_link,
+    new_invite_token,
+    token_hash,
+    valid_email,
+)
 from api.sessions import LoginState, Session, SessionStore, new_token
 from api.store import ApiStore, ApproveResult
 from api.whatsapp import (
@@ -36,6 +46,7 @@ from api.whatsapp import (
 )
 from shared import log, metrics, security, tracing
 from shared.schema import StrictModel
+from shared.security import record as record_security_event
 from shared.streams import APPROVED_ACTIONS, STREAM_MAX_LENGTH
 
 logger = logging.getLogger(__name__)
@@ -69,6 +80,37 @@ class Me(BaseModel):
     is_admin: bool
     # The browser sends this back in X-CSRF-Token on every change (T10).
     csrf_token: str
+
+
+class InviteCheckOut(BaseModel):
+    # Masked: whoever holds the link learns which account to use, not the full address.
+    email_hint: str
+
+
+class LoginUrlOut(BaseModel):
+    url: str
+
+
+class InviteOut(BaseModel):
+    invite_id: UUID
+    email: str
+    status: str
+    expires_at: datetime
+    created_at: datetime
+
+
+class InviteCreatedOut(InviteOut):
+    # Shown once, to the admin who made it. Only its hash is stored (migration 0007).
+    link: str
+
+
+class AdminUserOut(BaseModel):
+    email: str
+    status: str
+    is_admin: bool
+    whatsapp_verified: bool
+    google_status: str
+    created_at: datetime
 
 
 class SlotOut(BaseModel):
@@ -210,30 +252,62 @@ def create_app(deps: Deps | None = None) -> FastAPI:
 
     # --- Login ------------------------------------------------------------------------
 
+    def to_app(path: str) -> RedirectResponse:
+        return RedirectResponse(f"{d.web_app_url.rstrip('/')}/{path}", status_code=303)
+
     @app.get("/auth/google/login")
     def login() -> RedirectResponse:
         state, verifier = new_token(), secrets.token_urlsafe(64)
         d.sessions.put_login_state(state, LoginState(code_verifier=verifier))
         return RedirectResponse(d.login.authorization_url(state, verifier), status_code=303)
 
+    @app.post("/invites/check")
+    def check_invite(body: InviteTokenIn) -> InviteCheckOut:
+        """Is this invite live? The same 404 for unknown, used, revoked and expired (T14)."""
+        email = d.store.invite_email(token_hash(body.token))
+        if email is None:
+            raise HTTPException(status_code=404, detail="invite not found")
+        return InviteCheckOut(email_hint=email_hint(email))
+
+    @app.post("/auth/google/invite")
+    def login_with_invite(body: InviteTokenIn) -> LoginUrlOut:
+        """Start a login that may accept this invite. The token travels in the body (T22)."""
+        hashed = token_hash(body.token)
+        email = d.store.invite_email(hashed)
+        if email is None:
+            raise HTTPException(status_code=404, detail="invite not found")
+        state, verifier = new_token(), secrets.token_urlsafe(64)
+        d.sessions.put_login_state(state, LoginState(code_verifier=verifier, invite_hash=hashed))
+        return LoginUrlOut(url=d.login.authorization_url(state, verifier, login_hint=email))
+
     @app.get(CALLBACK_PATH)
     def callback(
         state: str | None = None, code: str | None = None, error: str | None = None
     ) -> Response:
+        # Every refusal goes back to the web app's login screen with a short reason code;
+        # nothing the attacker controls is echoed (T19).
         pending = d.sessions.take_login_state(state) if state else None
         if pending is None or error or not code:
-            return _page("ההתחברות לא הושלמה. נסו שוב.", 400)
+            return to_app("login?error=failed")
         try:
             identity = d.login.exchange(code, pending.code_verifier)
         except LoginError:
-            return _page("Google לא אישר את ההתחברות. נסו שוב.", 400)
-        user_id = d.store.find_user(identity.email) if identity.email_verified else None
+            return to_app("login?error=failed")
+        if not identity.email_verified:
+            return to_app("login?error=not_invited")
+        user_id = d.store.find_user(identity.email)
+        joined = False
+        if user_id is None and pending.invite_hash:
+            # The invite must be live and bound to exactly this verified address (T14).
+            user_id = d.store.accept_invite(pending.invite_hash, identity.email)
+            joined = user_id is not None
         if user_id is None:
             # Joining is by invitation only (T14). Same answer whatever the reason.
-            return _page("החשבון הזה לא מוזמן למערכת.", 403)
+            record_security_event("login_not_invited")
+            return to_app("login?error=not_invited")
         session = d.sessions.create(user_id)
-        d.store.audit(user_id, "login", {"channel": "web"})
-        response = RedirectResponse(d.web_app_url, status_code=303)
+        d.store.audit(user_id, "login", {"channel": "web", "joined": joined})
+        response = to_app("onboarding" if joined else "")
         response.set_cookie(
             COOKIE,
             session.session_id,
@@ -387,6 +461,44 @@ def create_app(deps: Deps | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="not found")
         return Done(status="dismissed")
 
+    # --- Admin: invites and users (UC-A6) -----------------------------------------------
+
+    def admin_of(session: Session) -> UUID:
+        user = d.store.user(session.data.user_id)
+        if user is None or not user.is_admin:
+            raise HTTPException(status_code=403, detail="admins only")
+        return user.user_id
+
+    @app.post("/admin/invites", status_code=201)
+    def create_invite(body: InviteCreateIn, session: Change) -> InviteCreatedOut:
+        admin = admin_of(session)
+        email = body.email.strip().lower()
+        if not valid_email(email):
+            raise HTTPException(status_code=422, detail="not an email address")
+        if d.store.find_user(email) is not None:
+            raise HTTPException(status_code=409, detail="already a user")
+        token = new_invite_token()
+        invite = d.store.create_invite(
+            admin, email, token_hash(token), datetime.now(UTC) + INVITE_LIFETIME
+        )
+        if invite is None:  # Postgres refused: not an admin after all (migration 0007)
+            raise HTTPException(status_code=403, detail="admins only")
+        return InviteCreatedOut(**invite.__dict__, link=invite_link(d.web_app_url, token))
+
+    @app.get("/admin/invites")
+    def list_invites(session: Auth) -> list[InviteOut]:
+        return [InviteOut(**i.__dict__) for i in d.store.invites(admin_of(session))]
+
+    @app.delete("/admin/invites/{invite_id}")
+    def revoke_invite(invite_id: UUID, session: Change) -> Done:
+        if not d.store.revoke_invite(admin_of(session), invite_id):
+            raise HTTPException(status_code=404, detail="not found or no longer pending")
+        return Done(status="revoked")
+
+    @app.get("/admin/users")
+    def list_users(session: Auth) -> list[AdminUserOut]:
+        return [AdminUserOut(**u.__dict__) for u in d.store.admin_users(admin_of(session))]
+
     tracing.instrument_fastapi(app)
     return app
 
@@ -477,14 +589,4 @@ def _out(action: Any) -> ActionOut:
         content_hash=action.content_hash,
         expires_at=action.expires_at,
         created_at=action.created_at,
-    )
-
-
-def _page(message: str, status: int) -> HTMLResponse:
-    from html import escape
-
-    return HTMLResponse(
-        '<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8">'
-        f"<title>התחברות</title><p>{escape(message)}</p></html>",
-        status_code=status,
     )

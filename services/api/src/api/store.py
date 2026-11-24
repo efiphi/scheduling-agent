@@ -20,7 +20,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from sqlalchemy import Engine, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 
 from db.session import set_user_context
 from shared import metrics, security
@@ -50,6 +50,27 @@ class Action:
     payload: dict[str, Any]
     content_hash: str
     expires_at: datetime
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class Invite:
+    invite_id: UUID
+    email: str
+    status: str  # pending | used | expired | revoked
+    expires_at: datetime
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class AdminUser:
+    """What the admin screen shows about a user: setup state, never their data."""
+
+    email: str
+    status: str
+    is_admin: bool
+    whatsapp_verified: bool
+    google_status: str
     created_at: datetime
 
 
@@ -110,6 +131,40 @@ class ApiStore(Protocol):
     def resume(self, user_id: UUID) -> None: ...
 
     def security_event(self, user_id: UUID | None, kind: str, details: dict[str, Any]) -> None: ...
+
+    # --- Invites (UC-A1, UC-A6, T14) ---------------------------------------------------
+
+    def create_invite(
+        self, admin_id: UUID, email: str, token_hash: str, expires_at: datetime
+    ) -> Invite | None:
+        """None if Postgres refuses: the caller is not an admin."""
+        ...
+
+    def invites(self, admin_id: UUID) -> list[Invite]: ...
+
+    def revoke_invite(self, admin_id: UUID, invite_id: UUID) -> bool: ...
+
+    def invite_email(self, token_hash: str) -> str | None:
+        """The address a live invite is for; None if unknown, used, revoked or expired."""
+        ...
+
+    def accept_invite(self, token_hash: str, email: str) -> UUID | None:
+        """Create the user from a live invite bound to this email; None for any refusal."""
+        ...
+
+    def admin_users(self, admin_id: UUID) -> list[AdminUser]: ...
+
+
+_INVITE_COLUMNS = (
+    "invite_id, email,"
+    " CASE WHEN used_at IS NOT NULL THEN 'used' WHEN revoked_at IS NOT NULL THEN 'revoked'"
+    " WHEN expires_at <= now() THEN 'expired' ELSE 'pending' END,"
+    " expires_at, created_at"
+)
+
+
+def _invite(row: Any) -> Invite:
+    return Invite(UUID(str(row[0])), row[1], row[2], row[3], row[4])
 
 
 _ACTION_COLUMNS = "action_id, kind, status, payload, content_hash, expires_at, created_at"
@@ -376,3 +431,70 @@ class SqlApiStore:
                 {"u": user_id, "k": kind, "d": json.dumps(details)},
             )
         security.record(kind, user_id)  # a signal for detection rules (ADR-022)
+
+    # --- Invites ------------------------------------------------------------------------
+
+    def create_invite(
+        self, admin_id: UUID, email: str, token_hash: str, expires_at: datetime
+    ) -> Invite | None:
+        try:
+            with self._engine.begin() as conn:
+                set_user_context(conn, admin_id)
+                row = conn.execute(
+                    text(
+                        "INSERT INTO app.invites (user_id, email, token_hash, expires_at)"  # noqa: S608
+                        f" VALUES (:u, lower(:e), :h, :x) RETURNING {_INVITE_COLUMNS}"
+                    ),
+                    {"u": admin_id, "e": email, "h": token_hash, "x": expires_at},
+                ).one()
+                _audit(conn, admin_id, "invite_created", {"invite_id": str(row[0])})
+        except ProgrammingError:
+            return None  # the RLS policy: only an admin may invite (migration 0007)
+        return _invite(row)
+
+    def invites(self, admin_id: UUID) -> list[Invite]:
+        with self._engine.begin() as conn:
+            set_user_context(conn, admin_id)
+            rows = conn.execute(
+                text(
+                    f"SELECT {_INVITE_COLUMNS} FROM app.invites"  # noqa: S608 - fixed columns
+                    " WHERE user_id = :u ORDER BY created_at DESC"
+                ),
+                {"u": admin_id},
+            ).all()
+        return [_invite(r) for r in rows]
+
+    def revoke_invite(self, admin_id: UUID, invite_id: UUID) -> bool:
+        with self._engine.begin() as conn:
+            set_user_context(conn, admin_id)
+            changed = conn.execute(
+                text(
+                    "UPDATE app.invites SET revoked_at = now()"
+                    " WHERE user_id = :u AND invite_id = :i"
+                    " AND used_at IS NULL AND revoked_at IS NULL"
+                ),
+                {"u": admin_id, "i": invite_id},
+            ).rowcount
+            if changed:
+                _audit(conn, admin_id, "invite_revoked", {"invite_id": str(invite_id)})
+        return bool(changed)
+
+    def invite_email(self, token_hash: str) -> str | None:
+        with self._engine.begin() as conn:  # before login: no user context
+            found = conn.execute(
+                text("SELECT app.invite_email(:h)"), {"h": token_hash}
+            ).scalar_one_or_none()
+        return None if found is None else str(found)
+
+    def accept_invite(self, token_hash: str, email: str) -> UUID | None:
+        with self._engine.begin() as conn:
+            found = conn.execute(
+                text("SELECT app.accept_invite(:h, :e)"), {"h": token_hash, "e": email}
+            ).scalar_one_or_none()
+        return None if found is None else UUID(str(found))
+
+    def admin_users(self, admin_id: UUID) -> list[AdminUser]:
+        with self._engine.begin() as conn:
+            set_user_context(conn, admin_id)
+            rows = conn.execute(text("SELECT * FROM app.admin_users()")).all()
+        return [AdminUser(*r) for r in rows]

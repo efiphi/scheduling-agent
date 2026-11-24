@@ -160,7 +160,17 @@ kubectl -n observability port-forward svc/grafana 3000:80   # then http://localh
 
 In the **Scheduling agent** folder: *system* (polling, restarts, queues, errors), *agent and model* (decisions, tokens, spend against the daily cap, agent traces) and *email to meeting* (emails, actions, approvals, end-to-end traces). Six alert rules show under Alerting. Dashboards and rules come from `deploy/cluster/observability/`; after editing a dashboard's JSON run `python3 deploy/cluster/observability/render_dashboards.py`. Decisions: ADR-018.
 
-Connecting a Google account on the cluster runs inside the gateway pod, which holds its secrets:
+**Adding users (ADR-024):** an admin invites from the web app (Settings → User management): enter the address, copy the one-time link (72 hours) and send it. The invitee logs in with Google through the link, then connects Gmail and Calendar, verifies WhatsApp and sets a stop code in the onboarding screens. Two manual steps per invitee while Google's app is in testing mode and WhatsApp uses Meta's test number: add the address under *Google Cloud → OAuth consent screen → Test users*, and add the number as a recipient of the test number in Meta's WhatsApp settings.
+
+Only the database owner can make someone an admin; no service can:
+
+```bash
+uv run --env-file deploy/compose/.env python -m db.dev make-admin --email <address>   # Compose
+kubectl -n scheduling-agent exec postgres-0 -- psql -U postgres -d scheduling_agent \
+  -c "UPDATE app.users SET is_admin = true WHERE email = lower('<address>')"           # a cluster
+```
+
+The owner's fallback for connecting Google without the web app still runs inside the gateway pod, which holds its secrets; the browser lands on the web app afterwards:
 
 ```bash
 kubectl -n scheduling-agent exec deploy/google-gateway -- python -m google_gateway.connect --user-id <id>

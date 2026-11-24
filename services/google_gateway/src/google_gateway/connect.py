@@ -2,8 +2,9 @@
 
     uv run --env-file deploy/compose/.env python -m google_gateway.connect --user-id <uuid>
 
-A stand-in until web login exists (step 1.9): then the web app starts the same flow for the
-logged-in user. Whoever runs this needs the gateway's secrets, which only the owner has.
+The web app's "Connect Google" button starts the same flow through a one-time ticket
+(shared/connect_ticket.py); this command is the owner's fallback. Whoever runs it needs the
+gateway's secrets, which only the owner has. Afterwards the browser lands on the web app.
 The URL works once, within 10 minutes, and only with the gateway running (serve.py).
 """
 

@@ -85,8 +85,9 @@ workloads:
     secret: gateway
     internet: true
     port: 8001
-    # The OAuth callback only, on 127.0.0.1:8001 (ADR-010).
-    ingress: {entrypoint: sa-gateway, paths: [/oauth/google/callback]}
+    # The OAuth start (a one-time ticket from the api) and callback only, on 127.0.0.1:8001
+    # (ADR-010, shared/connect_ticket.py).
+    ingress: {entrypoint: sa-gateway, paths: [/oauth/google/start, /oauth/google/callback]}
     command: [python, -m, google_gateway.serve]
     health: /healthz
     env: {GATEWAY_BIND_HOST: 0.0.0.0}

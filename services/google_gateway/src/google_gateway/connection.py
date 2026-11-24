@@ -26,6 +26,7 @@ from google_gateway.oauth_state import (
     new_state,
 )
 from google_gateway.token_crypto import TokenCipher
+from shared.connect_ticket import ReturnTo
 
 logger = logging.getLogger(__name__)
 
@@ -48,17 +49,28 @@ class ConnectFlow:
     repo: CredentialRepository
     cipher: TokenCipher
 
-    def start(self, user_id: UUID) -> str:
+    def start(self, user_id: UUID, return_to: ReturnTo = "onboarding") -> str:
         """Return the Google consent URL for this user. It works once, for 10 minutes."""
         state, verifier = new_state(), new_code_verifier()
-        self.states.put(state, PendingConnect(user_id=user_id, code_verifier=verifier))
+        self.states.put(
+            state, PendingConnect(user_id=user_id, code_verifier=verifier, return_to=return_to)
+        )
         return self.google.authorization_url(state, verifier)
 
     def complete(self, state: str | None, code: str | None, error: str | None) -> Outcome:
+        return self.finish(state, code, error)[0]
+
+    def finish(
+        self, state: str | None, code: str | None, error: str | None
+    ) -> tuple[Outcome, ReturnTo]:
+        """The outcome, and the web app screen the user started from."""
         pending = self.states.take(state) if state else None
         if pending is None:
             self.repo.security_event(None, "oauth_invalid_state", {})
-            return self._done(Outcome.INVALID_STATE, None)
+            return self._done(Outcome.INVALID_STATE, None), "onboarding"
+        return self._complete(pending, code, error), pending.return_to
+
+    def _complete(self, pending: PendingConnect, code: str | None, error: str | None) -> Outcome:
         user_id = pending.user_id
 
         if error is not None or not code:

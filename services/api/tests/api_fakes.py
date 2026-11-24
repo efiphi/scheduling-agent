@@ -250,6 +250,11 @@ class FakeStore:
         self.invite_rows[token_hash] = (admin, Invite(**{**invite.__dict__, "status": "used"}))
         return self.add_user(email.lower())
 
+    google: dict[UUID, str] = field(default_factory=dict)
+
+    def google_status(self, user_id: UUID) -> Any:
+        return self.google.get(user_id, "not_connected")
+
     def admin_users(self, admin_id: UUID) -> list[AdminUser]:
         if not self.users[admin_id].is_admin:
             return []
@@ -270,6 +275,17 @@ class FakeRedis:
 
     counters: dict[str, int] = field(default_factory=dict)
     queued: list[Any] = field(default_factory=list)
+    values: dict[str, str] = field(default_factory=dict)
+
+    # Plain keys, for the Google connect ticket (shared.connect_ticket).
+    def set(self, name: str, value: str, ex: int | None = None, nx: bool = False) -> bool:
+        if nx and name in self.values:
+            return False
+        self.values[name] = value
+        return True
+
+    def getdel(self, name: str) -> str | None:
+        return self.values.pop(name, None)
 
     # Counters and a pipeline, for the alert relay's hourly cap. Expiry is not modelled.
     def pipeline(self) -> "FakeRedis":

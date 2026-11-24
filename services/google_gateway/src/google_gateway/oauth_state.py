@@ -18,6 +18,7 @@ from uuid import UUID
 
 from redis import Redis
 
+from shared.connect_ticket import ReturnTo
 from shared.schema import StrictModel
 
 STATE_TTL_SECONDS = 600
@@ -29,6 +30,8 @@ _STATE_FORMAT = re.compile(r"[A-Za-z0-9_-]{43}")
 class PendingConnect(StrictModel):
     user_id: UUID
     code_verifier: str
+    # Where the web app should land afterwards (shared.connect_ticket, a fixed list).
+    return_to: ReturnTo = "onboarding"
 
 
 def new_state() -> str:

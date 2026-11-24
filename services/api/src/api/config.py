@@ -12,6 +12,8 @@ from shared.schema import StrictModel
 
 DEFAULT_REDIRECT_URI = "http://localhost:8000/auth/google/callback"
 DEFAULT_WEB_APP_URL = "http://localhost:5173/"
+# google-gateway's route that starts "Connect Google" (shared/connect_ticket.py).
+DEFAULT_CONNECT_START_URL = "http://localhost:8001/oauth/google/start"
 
 
 class ConfigError(Exception):
@@ -23,6 +25,7 @@ class ApiConfig(StrictModel):
     google_client_secret: SecretStr
     redirect_uri: str
     web_app_url: str
+    connect_start_url: str
     db_password: SecretStr
     db_host: str
     db_port: int
@@ -46,6 +49,7 @@ class ApiConfig(StrictModel):
             google_client_secret=SecretStr(_required("GOOGLE_LOGIN_CLIENT_SECRET")),
             redirect_uri=os.environ.get("GOOGLE_LOGIN_REDIRECT_URI", DEFAULT_REDIRECT_URI),
             web_app_url=os.environ.get("WEB_APP_URL", DEFAULT_WEB_APP_URL),
+            connect_start_url=os.environ.get("GOOGLE_CONNECT_START_URL", DEFAULT_CONNECT_START_URL),
             db_password=SecretStr(_required("API_DB_PASSWORD")),
             db_host=os.environ.get("DB_HOST", "127.0.0.1"),
             db_port=int(os.environ.get("DB_PORT", "5432")),

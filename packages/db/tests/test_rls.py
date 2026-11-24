@@ -221,3 +221,15 @@ def test_gateway_cannot_call_find_user_by_email(gateway: Engine, full_seed: Any)
 def test_api_cannot_call_users_to_poll(api: Engine, full_seed: Any) -> None:
     with pytest.raises(ProgrammingError, match="permission denied"), api.begin() as conn:
         conn.execute(text("SELECT * FROM app.users_to_poll()"))
+
+
+def test_t16_api_learns_only_the_google_status(api: Engine, full_seed: Any) -> None:
+    with api.begin() as conn:
+        set_user_context(conn, full_seed.user_a)
+        row = conn.execute(text("SELECT * FROM app.google_status()")).one()
+    assert tuple(row) == ("connected",)  # one word, no token
+    with api.begin() as conn:
+        set_user_context(conn, full_seed.user_b)
+        assert conn.execute(text("SELECT app.google_status()")).scalar_one() == "not_connected"
+    with api.begin() as conn:  # no context: nothing to report
+        assert conn.execute(text("SELECT app.google_status()")).scalar_one() == "not_connected"

@@ -16,7 +16,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol, cast
 from uuid import UUID
 
 from sqlalchemy import Engine, text
@@ -51,6 +51,9 @@ class Action:
     content_hash: str
     expires_at: datetime
     created_at: datetime
+
+
+GoogleStatus = Literal["connected", "expired", "revoked", "not_connected"]
 
 
 @dataclass(frozen=True)
@@ -153,6 +156,10 @@ class ApiStore(Protocol):
         ...
 
     def admin_users(self, admin_id: UUID) -> list[AdminUser]: ...
+
+    def google_status(self, user_id: UUID) -> GoogleStatus:
+        """connected | expired | revoked | not_connected; never the token (migration 0008)."""
+        ...
 
 
 _INVITE_COLUMNS = (
@@ -498,3 +505,9 @@ class SqlApiStore:
             set_user_context(conn, admin_id)
             rows = conn.execute(text("SELECT * FROM app.admin_users()")).all()
         return [AdminUser(*r) for r in rows]
+
+    def google_status(self, user_id: UUID) -> GoogleStatus:
+        with self._engine.begin() as conn:
+            set_user_context(conn, user_id)
+            found = conn.execute(text("SELECT app.google_status()")).scalar_one()
+        return cast(GoogleStatus, str(found))

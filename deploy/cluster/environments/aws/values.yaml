@@ -26,12 +26,16 @@ workloads:
       WEB_APP_URL: https://agent.efi-agent.dev/
       # Under /api, like everything the api serves on this host.
       GOOGLE_LOGIN_REDIRECT_URI: https://agent.efi-agent.dev/api/auth/google/callback
+      # The gateway's start route for "Connect Google" (shared/connect_ticket.py).
+      GOOGLE_CONNECT_START_URL: https://agent.efi-agent.dev/oauth/google/start
   notifier:
     env:
       WEB_APP_URL: https://agent.efi-agent.dev/
   google-gateway:
     env:
       GOOGLE_CONNECT_REDIRECT_URI: https://agent.efi-agent.dev/oauth/google/callback
+      # After connecting, the browser returns to the web app's screens.
+      WEB_APP_URL: https://agent.efi-agent.dev/
 
 # Since step 6.5 this cluster reads the demo mailbox and sends the owner's alerts; k3d does
 # neither (environments/k3d/settings.yaml).

@@ -164,7 +164,7 @@ Oct 22, 2026 · @Efi
 | התחברות | GET /auth/google/login, POST /auth/google/invite, GET /auth/google/callback, POST /auth/logout | התחברות עם Google והתנתקות. התחברות מהזמנה מתחילה ב-POST עם הטוקן בגוף הבקשה |
 | הזמנות | POST /invites/check | בדיקת הזמנה לפני התחברות. מחזירה רק רמז לכתובת (d***@example.com) |
 | משתמש | GET /me | פרטי המשתמש, סטטוס (פעיל או מושהה) ומצב החיבורים |
-| חיבורים | POST /integrations/google/connect, DELETE /integrations/google | חיבור וניתוק של Gmail והיומן. connect מחזיר כתובת הפניה לגוגל; ה-callback מגיע ל-Google Gateway ולא ל-API |
+| חיבורים | POST /integrations/google/connect, DELETE /integrations/google | חיבור וניתוק של Gmail והיומן. connect מחזיר כתובת ל-Google Gateway עם כרטיס חד-פעמי (5 דקות, ב-Redis רק ה-hash שלו). ה-Gateway פותח את ההסכמה מול Google, ה-callback מגיע אליו ולא ל-API, ובסוף הדפדפן חוזר לאפליקציה עם קוד תוצאה בלבד. ה-API יודע רק את סטטוס החיבור (מחובר, פג, בוטל), דרך פונקציה במסד הנתונים |
 | ווטסאפ | POST /whatsapp/verify | מחזיר קוד חד-פעמי ואת מספר הסוכן. האימות מסתיים כשהקוד מגיע מהטלפון של המשתמש (מסמך החלטה 017) |
 | פעולות | GET /actions?status= | רשימת פעולות לפי סטטוס |
 | פעולות | GET /actions/:id | פרטי פעולה מלאים |

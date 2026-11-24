@@ -14,6 +14,8 @@ from shared.schema import StrictModel
 
 # Must match the redirect URI registered on the gateway-connect OAuth client (ADR-010).
 DEFAULT_REDIRECT_URI = "http://localhost:8001/oauth/google/callback"
+# Where the browser goes after a connection attempt (the web app's own screens).
+DEFAULT_WEB_APP_URL = "http://localhost:5173/"
 
 
 class ConfigError(Exception):
@@ -24,6 +26,7 @@ class GatewayConfig(StrictModel):
     google_client_id: str
     google_client_secret: SecretStr
     redirect_uri: str
+    web_app_url: str = DEFAULT_WEB_APP_URL
     db_password: SecretStr
     db_host: str
     db_port: int
@@ -37,6 +40,7 @@ class GatewayConfig(StrictModel):
             google_client_id=_required("GOOGLE_CONNECT_CLIENT_ID"),
             google_client_secret=SecretStr(_required("GOOGLE_CONNECT_CLIENT_SECRET")),
             redirect_uri=os.environ.get("GOOGLE_CONNECT_REDIRECT_URI", DEFAULT_REDIRECT_URI),
+            web_app_url=os.environ.get("WEB_APP_URL", DEFAULT_WEB_APP_URL),
             db_password=SecretStr(_required("GATEWAY_DB_PASSWORD")),
             db_host=os.environ.get("DB_HOST", "127.0.0.1"),
             db_port=int(os.environ.get("DB_PORT", "5432")),

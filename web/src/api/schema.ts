@@ -215,6 +215,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/integrations/google/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Connect Google
+         * @description A one-time ticket for google-gateway, which alone runs the consent (invariant 1).
+         */
+        post: operations["connect_google_integrations_google_connect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/invites/check": {
         parameters: {
             query?: never;
@@ -478,6 +498,15 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** GoogleConnectIn */
+        GoogleConnectIn: {
+            /**
+             * Return To
+             * @default onboarding
+             * @enum {string}
+             */
+            return_to: "onboarding" | "settings/security";
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -572,10 +601,17 @@ export interface components {
             csrf_token: string;
             /** Email */
             email: string;
+            /**
+             * Google Status
+             * @enum {string}
+             */
+            google_status: "connected" | "expired" | "revoked" | "not_connected";
             /** Is Admin */
             is_admin: boolean;
             /** Status */
             status: string;
+            /** Whatsapp Verified */
+            whatsapp_verified: boolean;
         };
         /** QuestionOut */
         QuestionOut: {
@@ -1061,6 +1097,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+        };
+    };
+    connect_google_integrations_google_connect_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-csrf-token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                sa_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleConnectIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginUrlOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

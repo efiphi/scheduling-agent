@@ -11,9 +11,9 @@ import os
 
 import uvicorn
 
-from google_gateway.app import create_app
+from google_gateway.app import RedisTickets, create_app
 from google_gateway.config import GatewayConfig
-from google_gateway.wiring import connect_flow
+from google_gateway.wiring import connect_flow, redis_client
 from shared import log, metrics, tracing
 
 # Local only by default. The container sets 0.0.0.0 and Compose publishes the port on
@@ -27,7 +27,8 @@ def main() -> None:
     log.configure("google-gateway")
     tracing.configure("google-gateway")
     metrics.configure("google-gateway")
-    app = create_app(connect_flow(GatewayConfig.from_env()))
+    config = GatewayConfig.from_env()
+    app = create_app(connect_flow(config), RedisTickets(redis_client(config)), config.web_app_url)
     uvicorn.run(app, host=HOST, port=PORT, access_log=False, server_header=False)
 
 

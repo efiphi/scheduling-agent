@@ -207,6 +207,7 @@ GitHub Actions רץ על כל pull request. שלב שנכשל עוצר את הש
 | [008](adr/008-sealed-secrets.md) | ניהול סודות | Sealed Secrets | SOPS |
 | [009](adr/009-temporary-cloud-k3s-aws.md) | ענן | הוחלף ב-023 | — |
 | [023](adr/023-always-on-cloud-server.md) | ענן | שרת spot אחד תמיד דולק שמרפא את עצמו, HTTPS בכתובת קבועה, גיבויים ו-Falco | סביבה זמנית (009), on-demand, t4g, EKS |
+| [024](adr/024-invites-and-self-serve-onboarding.md) | הצטרפות | קישור הזמנה חד-פעמי (טוקן אחרי ה-#, רק hash במסד, Postgres אוכף שרק מנהל מזמין), וחיבור Google מהאפליקציה דרך כרטיס חד-פעמי ל-Gateway | טוקן בנתיב, בדיקות ב-API בלבד, שליחת ההזמנה במייל מהמערכת |
 | [010](adr/010-split-oauth-flows.md) | OAuth | שתי זרימות: התחברות ב-API, ו-callback של Gmail ו-Calendar ב-Gateway. כולל רשימת ה-scopes | זרימה אחת דרך ה-API |
 | [011](adr/011-agent-has-no-db-access.md) | גישת ה-Agent לנתונים | בלי משתמש DB. ההקשר מגיע במשימה, ופנוי/תפוס דרך Redis | משתמש DB לקריאה בלבד |
 | [012](adr/012-outbound-email-from-template.md) | נוסח המייל | תבנית ב-Gateway, ומשפט פתיחה קצר מהמודל | המודל כותב הכל; תבנית בלבד |

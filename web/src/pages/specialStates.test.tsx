@@ -12,6 +12,7 @@ const healthy: Account = {
   backupNumbers: [],
   isAdmin: false,
   spendCapReached: false,
+  whatsappVerified: true,
 };
 
 function withAccount(overrides: Partial<Account>) {
@@ -37,7 +38,7 @@ describe("status banners", () => {
     renderApp("/", withAccount({ google: "expired" }));
     const banner = await screen.findByRole("alert", { name: "החיבור ל-Google" });
     expect(banner).toHaveTextContent("החיבור ל-Google פג.");
-    expect(screen.getByRole("button", { name: "חיבור מחדש" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "לחיבור מחדש" })).toHaveAttribute("href", "/settings/security");
   });
 
   it("test_t24_spend_cap_banner", async () => {

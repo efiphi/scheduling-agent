@@ -48,6 +48,7 @@ export type ConnectionStatus = "connected" | "expired" | "disconnected";
 export interface Account {
   agentStatus: "active" | "paused";
   google: ConnectionStatus;
+  whatsappVerified: boolean;
   whatsappNumber?: string;
   /** Up to two pre-registered numbers the stop code is accepted from (ADR-014). */
   backupNumbers: string[];
@@ -72,7 +73,19 @@ export interface DailySummary {
   skippedEmails: SkippedEmail[];
 }
 
+/** What the admin sees about a user: setup state only, never their data (UC-A6, T13). */
 export interface ManagedUser {
   email: string;
-  status: "invited" | "active" | "removed";
+  status: "active" | "paused";
+  isAdmin: boolean;
+  whatsappVerified: boolean;
+  google: ConnectionStatus;
+}
+
+/** An invite the admin sent. The link itself is shown once, when it is made (T14). */
+export interface Invite {
+  id: string;
+  email: string;
+  status: "pending" | "used" | "expired" | "revoked";
+  expiresAt: string;
 }

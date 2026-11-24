@@ -17,7 +17,7 @@ describe("every screen in the map renders with no data", () => {
     ["/settings/security", "אבטחה"],
     ["/admin/users", "ניהול משתמשים"],
     ["/login", "סוכן פגישות"],
-    ["/invite/some-token", "הזמנה"],
+    ["/invite", "הזמנה"],
     ["/onboarding", "הגדרה ראשונית"],
   ])("%s", async (path, heading) => {
     renderApp(path, notConnectedSource);
@@ -69,18 +69,15 @@ describe("security screen", () => {
 });
 
 describe("onboarding wizard", () => {
-  it("moves forward and back through the six steps", async () => {
+  it("moves forward and back through the four steps", async () => {
     const user = userEvent.setup();
     renderApp("/onboarding", notConnectedSource);
-    expect(await screen.findByText("שלב 1 מתוך 6")).toBeInTheDocument();
+    expect(await screen.findByText("שלב 1 מתוך 4")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "הקודם" })).toBeDisabled();
 
-    for (let i = 0; i < 5; i++) await user.click(screen.getByRole("button", { name: "הבא" }));
-    expect(screen.getByText("שלב 6 מתוך 6")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "סיום" })).toBeDisabled();
-
-    await user.click(screen.getByRole("button", { name: "הקודם" }));
-    expect(screen.getByRole("heading", { level: 2, name: "אימות לבקשות חריגות" })).toBeInTheDocument();
+    for (let i = 0; i < 3; i++) await user.click(screen.getByRole("button", { name: "דלג בינתיים" }));
+    expect(screen.getByText("שלב 4 מתוך 4")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "לתור האישורים" })).toHaveAttribute("href", "/");
   });
 });
 

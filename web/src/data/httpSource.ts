@@ -1,9 +1,9 @@
 import { redirect } from "react-router";
 
 import type { components } from "../api/schema";
-import type { Account } from "../domain/account";
+import type { Account, ConnectionStatus, Invite, ManagedUser } from "../domain/account";
 import type { PendingAction } from "../domain/actions";
-import type { AgentQuestion, DataSource, DecisionResult, SecurityStatus, WhatsAppVerification } from "./source";
+import type { AgentQuestion, DataSource, DecisionResult, InviteResult, SecurityStatus, WhatsAppVerification } from "./source";
 
 // The real API (services/api), reached at /api through the Vite dev proxy or nginx, so the
 // browser sees one origin: the session cookie is sent, and no CORS rules are needed.
@@ -13,6 +13,11 @@ type Me = components["schemas"]["Me"];
 type QuestionOut = components["schemas"]["QuestionOut"];
 type SecurityOut = components["schemas"]["SecurityOut"];
 type VerificationOut = components["schemas"]["VerificationOut"];
+type InviteOut = components["schemas"]["InviteOut"];
+type InviteCreatedOut = components["schemas"]["InviteCreatedOut"];
+type AdminUserOut = components["schemas"]["AdminUserOut"];
+type InviteCheckOut = components["schemas"]["InviteCheckOut"];
+type LoginUrlOut = components["schemas"]["LoginUrlOut"];
 
 const BASE = "/api";
 const POLL_MS = 15_000;
@@ -27,6 +32,22 @@ async function getJson<T>(path: string): Promise<T> {
   if (response.status === 401) toLogin();
   if (!response.ok) throw new Error(`GET ${path} failed: ${response.status}`);
   return (await response.json()) as T;
+}
+
+function connection(status: string): ConnectionStatus {
+  if (status === "connected" || status === "expired") return status;
+  return "disconnected"; // revoked, or never connected
+}
+
+/** A POST before login: no session, so no CSRF token. The invite token travels in the body (T22). */
+async function postPublic<T>(path: string, body: unknown): Promise<T | null> {
+  const response = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return response.ok ? ((await response.json()) as T) : null;
 }
 
 export function toPendingAction(a: ActionOut): PendingAction {
@@ -97,7 +118,8 @@ export function createHttpSource(fetchCsrf: () => Promise<string> = defaultCsrf)
       csrf = me.csrf_token;
       return {
         agentStatus: me.status === "paused" ? "paused" : "active",
-        google: "connected",
+        google: connection(me.google_status),
+        whatsappVerified: me.whatsapp_verified,
         backupNumbers: [],
         isAdmin: me.is_admin,
         spendCapReached: false,
@@ -132,12 +154,42 @@ export function createHttpSource(fetchCsrf: () => Promise<string> = defaultCsrf)
       return { code: v.code, agentNumber: v.agent_number, expiresInSeconds: v.expires_in_seconds };
     },
     logOutEverywhere: async () => result(await send("DELETE", "/sessions")),
+    checkInvite: async (token) => {
+      const found = await postPublic<InviteCheckOut>("/invites/check", { token });
+      return found && { emailHint: found.email_hint };
+    },
+    startInviteLogin: async (token) => (await postPublic<LoginUrlOut>("/auth/google/invite", { token }))?.url ?? null,
+    connectGoogle: async (returnTo) => {
+      const response = await send("POST", "/integrations/google/connect", { return_to: returnTo });
+      return response.ok ? ((await response.json()) as LoginUrlOut).url : null;
+    },
+    listInvites: async (): Promise<Invite[]> =>
+      (await getJson<InviteOut[]>("/admin/invites")).map((i) => ({
+        id: i.invite_id,
+        email: i.email,
+        status: i.status as Invite["status"],
+        expiresAt: i.expires_at,
+      })),
+    createInvite: async (email): Promise<InviteResult> => {
+      const response = await send("POST", "/admin/invites", { email });
+      if (response.ok) return { ok: true, link: ((await response.json()) as InviteCreatedOut).link };
+      const failed = await result(response);
+      return { ok: false, reason: failed.ok ? "" : failed.reason };
+    },
+    revokeInvite: async (id) => result(await send("DELETE", `/admin/invites/${encodeURIComponent(id)}`)),
+    listUsers: async (): Promise<ManagedUser[]> =>
+      (await getJson<AdminUserOut[]>("/admin/users")).map((u) => ({
+        email: u.email,
+        status: u.status === "paused" ? "paused" : "active",
+        isAdmin: u.is_admin,
+        whatsappVerified: u.whatsapp_verified,
+        google: connection(u.google_status),
+      })),
     // Not in the API yet in the MVP: empty screens until their endpoints exist.
     listHistory: () => Promise.resolve([]),
     listContacts: () => Promise.resolve([]),
     getSettings: () => Promise.resolve(null),
     getSummary: () => Promise.resolve(null),
-    listUsers: () => Promise.resolve([]),
     // MVP: poll for new actions instead of Server-Sent Events (docs/04-web-app.md, decision
     // recorded there). A card that appears is announced as "created".
     subscribeToQueue: (onEvent) => {

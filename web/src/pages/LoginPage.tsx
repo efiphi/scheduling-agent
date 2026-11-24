@@ -1,5 +1,13 @@
-import { Icon, type IconName } from "../components/ui";
+import { useSearchParams } from "react-router";
+
+import { Icon, Notice, type IconName } from "../components/ui";
 import { buttonClass } from "../components/styles";
+
+// The api sends refused logins back here with a short code; only known codes are shown (T19).
+const errors: Record<string, string> = {
+  not_invited: "החשבון הזה לא מוזמן למערכת. ההצטרפות היא דרך קישור הזמנה, עם החשבון שאליו נשלחה.",
+  failed: "ההתחברות לא הושלמה. נסו שוב.",
+};
 
 const promises: readonly { icon: IconName; text: string }[] = [
   { icon: "check", text: "כל שליחה מחכה לאישור שלך" },
@@ -9,6 +17,9 @@ const promises: readonly { icon: IconName; text: string }[] = [
 
 // Sign-in is Google only (OpenID Connect, identity scopes only — ADR-010). No passwords.
 export function LoginPage() {
+  const [params] = useSearchParams();
+  const error = errors[params.get("error") ?? ""];
+
   return (
     <section className="flex min-h-[calc(100dvh-5rem)] flex-col justify-between gap-10 pt-10">
       <div className="flex flex-col gap-7">
@@ -33,6 +44,7 @@ export function LoginPage() {
         </ul>
       </div>
       <div className="flex flex-col gap-3.5">
+        {error && <Notice tone="danger">{error}</Notice>}
         {/* A full page navigation: the API redirects to Google and back (ADR-010). */}
         <a href="/api/auth/google/login" className={`${buttonClass.secondary} min-h-14 shadow-sm`}>
           התחברות עם Google

@@ -1,4 +1,4 @@
-import type { Account, Contact, DailySummary, HistoryEntry, ManagedUser, Settings } from "../domain/account";
+import type { Account, Contact, DailySummary, HistoryEntry, Invite, ManagedUser, Settings } from "../domain/account";
 import type { PendingAction } from "../domain/actions";
 import type { QueueEvent } from "../domain/queue";
 
@@ -25,6 +25,11 @@ export interface WhatsAppVerification {
   expiresInSeconds: number;
 }
 
+export type InviteResult = { ok: true; link: string } | { ok: false; reason: string };
+
+/** The web app screens google-gateway may send the browser back to (shared/connect_ticket.py). */
+export type GoogleReturnTo = "onboarding" | "settings/security";
+
 /**
  * Everything the UI reads goes through this interface. Screens never fetch directly,
  * so connecting the real API in Layer 1 means replacing one implementation.
@@ -50,6 +55,15 @@ export interface DataSource {
   setBackupNumbers(numbers: string[]): Promise<DecisionResult>;
   startWhatsAppVerification(): Promise<WhatsAppVerification | null>;
   logOutEverywhere(): Promise<DecisionResult>;
+  /** Is this invite live? Only a hint of its address comes back (T14). */
+  checkInvite(token: string): Promise<{ emailHint: string } | null>;
+  /** Google's sign-in URL for a login that may accept this invite; null if the invite is not live. */
+  startInviteLogin(token: string): Promise<string | null>;
+  /** google-gateway's URL with a one-time ticket; the api never sees a Google token (T16). */
+  connectGoogle(returnTo: GoogleReturnTo): Promise<string | null>;
+  listInvites(): Promise<Invite[]>;
+  createInvite(email: string): Promise<InviteResult>;
+  revokeInvite(id: string): Promise<DecisionResult>;
   /** Queue changes made elsewhere (WhatsApp, expiry). Returns an unsubscribe function. */
   subscribeToQueue(onEvent: (event: QueueEvent) => void): () => void;
 }
@@ -75,5 +89,11 @@ export const notConnectedSource: DataSource = {
   setBackupNumbers: () => Promise.resolve({ ok: false, reason: "not_connected" }),
   startWhatsAppVerification: () => Promise.resolve(null),
   logOutEverywhere: () => Promise.resolve({ ok: false, reason: "not_connected" }),
+  checkInvite: () => Promise.resolve(null),
+  startInviteLogin: () => Promise.resolve(null),
+  connectGoogle: () => Promise.resolve(null),
+  listInvites: () => Promise.resolve([]),
+  createInvite: () => Promise.resolve({ ok: false, reason: "not_connected" }),
+  revokeInvite: () => Promise.resolve({ ok: false, reason: "not_connected" }),
   subscribeToQueue: () => () => {},
 };

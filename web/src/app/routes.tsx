@@ -22,14 +22,17 @@ import { BareLayout } from "./BareLayout";
 export function createRoutes(source: DataSource): RouteObject[] {
   const beforeSetup: RouteObject = {
     element: <BareLayout />,
+    hydrateFallbackElement: <p className="p-4 text-muted">טוען…</p>,
     children: [
       { path: "/login", element: <LoginPage /> },
-      { path: "/invite/:token", element: <InvitePage /> },
-      { path: "/onboarding", element: <OnboardingPage /> },
+      // The token is in the fragment (/invite#<token>), never in the path (T22).
+      { path: "/invite", element: <InvitePage /> },
+      { path: "/onboarding", element: <OnboardingPage />, loader: () => source.getAccount() },
     ],
   };
 
   const app: RouteObject = {
+    id: "app",
     element: <AppLayout />,
     // The layout loads the account so the status banners show on every screen.
     loader: () => source.getAccount(),
@@ -46,7 +49,11 @@ export function createRoutes(source: DataSource): RouteObject[] {
       { path: "/contacts", element: <ContactsPage />, loader: () => source.listContacts() },
       { path: "/settings", element: <SettingsPage />, loader: () => source.getSettings() },
       { path: "/settings/security", element: <SecurityPage />, loader: () => source.getAccount() },
-      { path: "/admin/users", element: <AdminUsersPage />, loader: () => source.listUsers() },
+      {
+        path: "/admin/users",
+        element: <AdminUsersPage />,
+        loader: async () => ({ users: await source.listUsers(), invites: await source.listInvites() }),
+      },
       { path: "*", element: <NotFoundPage /> },
     ],
   };

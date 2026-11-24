@@ -151,7 +151,9 @@ def from_traceparent(value: str | None) -> otel_context.Context:
 # Paths never traced by the HTTP instrumentation: their query strings carry secrets (the
 # OAuth callbacks' code and state, the WhatsApp handshake's verify token, T16, T22), and
 # health checks would only be noise. Matched anywhere in the URL, comma-separated.
-UNTRACED_PATHS = "healthz,oauth/google/callback,auth/google/callback,whatsapp/webhook"
+UNTRACED_PATHS = (
+    "healthz,oauth/google/start,oauth/google/callback,auth/google/callback,whatsapp/webhook"
+)
 
 
 def instrument_fastapi(app: Any) -> None:

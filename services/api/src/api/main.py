@@ -16,6 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
+from urllib.parse import urlencode
 from uuid import UUID
 
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Query, Request
@@ -44,7 +45,8 @@ from api.whatsapp import (
     parse_messages,
     valid_signature,
 )
-from shared import log, metrics, security, tracing
+from shared import connect_ticket, log, metrics, security, tracing
+from shared.connect_ticket import ReturnTo
 from shared.schema import StrictModel
 from shared.security import record as record_security_event
 from shared.streams import APPROVED_ACTIONS, STREAM_MAX_LENGTH
@@ -78,6 +80,9 @@ class Me(BaseModel):
     email: str
     status: str
     is_admin: bool
+    # Status only: the api has no access to the tokens themselves (invariant 1, migration 0008).
+    google_status: Literal["connected", "expired", "revoked", "not_connected"]
+    whatsapp_verified: bool
     # The browser sends this back in X-CSRF-Token on every change (T10).
     csrf_token: str
 
@@ -89,6 +94,11 @@ class InviteCheckOut(BaseModel):
 
 class LoginUrlOut(BaseModel):
     url: str
+
+
+class GoogleConnectIn(StrictModel):
+    # The screen to come back to: a fixed list, so no open redirect (shared.connect_ticket).
+    return_to: ReturnTo = "onboarding"
 
 
 class InviteOut(BaseModel):
@@ -197,6 +207,7 @@ class Deps:
     cookie_secure: bool
     whatsapp: WhatsAppDeps | None = None
     notifier: "Notifier | None" = None
+    connect_start_url: str = "http://localhost:8001/oauth/google/start"
 
 
 # Sensitive changes need a login within the last 10 minutes, not just a live session.
@@ -343,8 +354,16 @@ def create_app(deps: Deps | None = None) -> FastAPI:
             email=user.email,
             status=user.status,
             is_admin=user.is_admin,
+            google_status=d.store.google_status(user.user_id),
+            whatsapp_verified=d.store.whatsapp_verified(user.user_id),
             csrf_token=session.data.csrf_token,
         )
+
+    @app.post("/integrations/google/connect")
+    def connect_google(body: GoogleConnectIn, session: Change) -> LoginUrlOut:
+        """A one-time ticket for google-gateway, which alone runs the consent (invariant 1)."""
+        ticket = connect_ticket.issue(d.redis, session.data.user_id, body.return_to)
+        return LoginUrlOut(url=f"{d.connect_start_url}?{urlencode({'ticket': ticket})}")
 
     # --- Actions ------------------------------------------------------------------------
 

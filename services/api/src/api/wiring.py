@@ -75,6 +75,7 @@ def deps_from_env() -> Deps:
         store=store,
         redis=redis,
         web_app_url=config.web_app_url,
+        connect_start_url=config.connect_start_url,
         cookie_secure=config.cookie_secure,
         whatsapp=whatsapp,
         notifier=notifier,

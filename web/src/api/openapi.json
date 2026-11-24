@@ -162,6 +162,22 @@
         "title": "Done",
         "type": "object"
       },
+      "GoogleConnectIn": {
+        "additionalProperties": false,
+        "properties": {
+          "return_to": {
+            "default": "onboarding",
+            "enum": [
+              "onboarding",
+              "settings/security"
+            ],
+            "title": "Return To",
+            "type": "string"
+          }
+        },
+        "title": "GoogleConnectIn",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -364,6 +380,16 @@
             "title": "Email",
             "type": "string"
           },
+          "google_status": {
+            "enum": [
+              "connected",
+              "expired",
+              "revoked",
+              "not_connected"
+            ],
+            "title": "Google Status",
+            "type": "string"
+          },
           "is_admin": {
             "title": "Is Admin",
             "type": "boolean"
@@ -371,12 +397,18 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "whatsapp_verified": {
+            "title": "Whatsapp Verified",
+            "type": "boolean"
           }
         },
         "required": [
           "email",
           "status",
           "is_admin",
+          "google_status",
+          "whatsapp_verified",
           "csrf_token"
         ],
         "title": "Me",
@@ -1273,6 +1305,79 @@
           }
         },
         "summary": "Healthz"
+      }
+    },
+    "/integrations/google/connect": {
+      "post": {
+        "description": "A one-time ticket for google-gateway, which alone runs the consent (invariant 1).",
+        "operationId": "connect_google_integrations_google_connect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Csrf-Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "sa_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sa Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleConnectIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginUrlOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Google"
       }
     },
     "/invites/check": {

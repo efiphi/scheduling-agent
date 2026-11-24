@@ -333,7 +333,7 @@ def test_only_the_three_http_services_are_exposed_each_on_its_own_entry_point(
     assert exposed == {
         "api": ("sa-api", ["/"]),
         # T16: the gateway exposes its OAuth callback and nothing else (no /healthz, no docs).
-        "google-gateway": ("sa-gateway", ["/oauth/google/callback"]),
+        "google-gateway": ("sa-gateway", ["/oauth/google/start", "/oauth/google/callback"]),
         # The only part reachable from the internet, through the tunnel (ADR-017).
         "whatsapp-webhook": ("sa-webhook", ["/whatsapp/webhook"]),
     }
@@ -581,6 +581,8 @@ def test_the_cloud_uses_its_public_address(aws_objects: list[dict[str, Any]]) ->
     assert env("api")["GOOGLE_LOGIN_REDIRECT_URI"] == f"{base}/api/auth/google/callback"
     assert env("notifier")["WEB_APP_URL"] == f"{base}/"
     assert env("google-gateway")["GOOGLE_CONNECT_REDIRECT_URI"] == f"{base}/oauth/google/callback"
+    assert env("google-gateway")["WEB_APP_URL"] == f"{base}/"
+    assert env("api")["GOOGLE_CONNECT_START_URL"] == f"{base}/oauth/google/start"
 
 
 def test_the_cloud_root_takes_shared_apps_only_never_k3ds() -> None:
@@ -631,7 +633,7 @@ def test_the_cloud_serves_everything_on_one_https_host(
     aws = ingresses(aws_objects)
     assert {name: paths(o) for name, o in aws.items()} == {
         "api": ["/api"],
-        "google-gateway": ["/oauth/google/callback"],
+        "google-gateway": ["/oauth/google/start", "/oauth/google/callback"],
         "whatsapp-webhook": ["/whatsapp/webhook"],
         "web": ["/"],
     }
